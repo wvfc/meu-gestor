@@ -6,17 +6,15 @@ import kotlinx.coroutines.flow.Flow
 
 class AttachmentRepository(private val attachmentDao: AttachmentDao) {
 
-    fun getByTransaction(transactionId: Long): Flow<List<AttachmentEntity>> =
-        attachmentDao.getByTransaction(transactionId)
+    fun getAll(): Flow<List<AttachmentEntity>> = attachmentDao.getAll()
 
-    fun getByTaxDocument(taxDocumentId: Long): Flow<List<AttachmentEntity>> =
-        attachmentDao.getByTaxDocument(taxDocumentId)
+    fun getByTransactionId(transactionId: Long): Flow<List<AttachmentEntity>> =
+        attachmentDao.getByTransactionId(transactionId)
 
-    suspend fun getById(id: Long): AttachmentEntity? = attachmentDao.getById(id)
+    fun getByTaxDocumentId(taxDocumentId: Long): Flow<List<AttachmentEntity>> =
+        attachmentDao.getByTaxDocumentId(taxDocumentId)
 
     suspend fun insert(attachment: AttachmentEntity): Long = attachmentDao.insert(attachment)
-
-    suspend fun update(attachment: AttachmentEntity) = attachmentDao.update(attachment)
 
     suspend fun delete(attachment: AttachmentEntity) = attachmentDao.delete(attachment)
 }

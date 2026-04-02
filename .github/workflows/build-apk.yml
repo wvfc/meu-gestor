@@ -20,17 +20,22 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
+      - name: Generate Gradle Wrapper
+        run: |
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Rename APK
         run: |
@@ -68,30 +73,18 @@ jobs:
           tag_name: v1.0.0-build.${{ steps.date.outputs.date }}
           name: "Meu Gestor v1.0.0 (Build ${{ steps.date.outputs.date }})"
           body: |
-            ## 📱 Meu Gestor - Gestão Financeira Pessoal
+            ## Meu Gestor - Gestao Financeira Pessoal
 
             APK pronto para instalar no seu Android.
 
             ### Como instalar:
             1. Baixe o arquivo **MeuGestor-v1.0.0-debug.apk** abaixo
-            2. No celular, vá em **Configurações > Segurança > Fontes desconhecidas** e habilite
+            2. No celular, habilite "Instalar de fontes desconhecidas"
             3. Abra o arquivo APK baixado no celular
-            4. Toque em **Instalar**
+            4. Toque em Instalar
 
             ### Requisitos:
             - Android 8.0 (Oreo) ou superior
-
-            ### Funcionalidades:
-            - Dashboard financeiro completo
-            - Controle de caixa (entradas/saídas)
-            - Cartões de crédito com limites e faturas
-            - Lançamentos futuros e projeções
-            - Relatórios e rankings de gastos
-            - Organizador de Imposto de Renda
-            - Metas de gastos com alertas
-            - Patrimônio e reservas por banco
-            - Modo escuro
-            - 100% offline
           files: MeuGestor-v1.0.0-debug.apk
           draft: false
           prerelease: false

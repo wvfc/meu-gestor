@@ -1,16 +1,7 @@
 package com.meugestor.app.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,68 +13,28 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.meugestor.app.data.database.entity.TransactionEntity
+import com.meugestor.app.data.database.entity.TransactionType
 import com.meugestor.app.ui.theme.ExpenseRed
 import com.meugestor.app.ui.theme.IncomeGreen
 import com.meugestor.app.util.CurrencyUtils
+import com.meugestor.app.util.DateUtils
 
-/**
- * Tipo de transação.
- */
-enum class TransactionType {
-    INCOME,  // Receita
-    EXPENSE  // Despesa
-}
-
-/**
- * Status da transação.
- */
-enum class TransactionStatus(val label: String) {
-    PAID("Pago"),
-    PENDING("Pendente"),
-    OVERDUE("Atrasado"),
-    CANCELLED("Cancelado")
-}
-
-/**
- * Item de lista para exibir uma transação.
- *
- * @param description Descrição da transação.
- * @param category Nome da categoria.
- * @param categoryColor Cor da categoria (exibida no círculo).
- * @param date Data formatada.
- * @param amount Valor da transação.
- * @param type Tipo: receita ou despesa.
- * @param status Status da transação.
- * @param modifier Modifier do Compose.
- * @param onClick Callback ao clicar no item.
- */
 @Composable
 fun TransactionItem(
-    description: String,
-    category: String,
-    categoryColor: Color,
-    date: String,
-    amount: Double,
-    type: TransactionType,
-    status: TransactionStatus,
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null
+    transaction: TransactionEntity,
+    categoryColor: Color = MaterialTheme.colorScheme.primary,
+    categoryName: String = "",
+    modifier: Modifier = Modifier
 ) {
-    val containerModifier = if (onClick != null) {
-        modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    } else {
-        modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    }
+    val isIncome = transaction.type == TransactionType.INCOME
 
     Row(
-        modifier = containerModifier,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Círculo com cor da categoria
         Box(
             modifier = Modifier
                 .size(40.dp)
@@ -101,34 +52,30 @@ fun TransactionItem(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        // Descrição e categoria
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = description,
+                text = transaction.description,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurface
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(2.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (categoryName.isNotEmpty()) {
+                    Text(
+                        text = categoryName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = " \u2022 ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    text = category,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = " \u2022 ",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = date,
+                    text = DateUtils.formatDate(transaction.date),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -137,28 +84,21 @@ fun TransactionItem(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // Valor e status
         Column(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.Center
         ) {
-            val amountColor = when (type) {
-                TransactionType.INCOME -> IncomeGreen
-                TransactionType.EXPENSE -> ExpenseRed
-            }
-            val prefix = when (type) {
-                TransactionType.INCOME -> "+ "
-                TransactionType.EXPENSE -> "- "
-            }
+            val amountColor = if (isIncome) IncomeGreen else ExpenseRed
+            val prefix = if (isIncome) "+ " else "- "
 
             Text(
-                text = prefix + CurrencyUtils.formatBRL(amount),
+                text = prefix + CurrencyUtils.formatBRL(transaction.amount),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = amountColor
             )
             Spacer(modifier = Modifier.height(4.dp))
-            StatusBadge(status = status)
+            StatusBadge(status = transaction.status.name)
         }
     }
 }

@@ -1,8 +1,3 @@
-# Correção final do workflow `.github/workflows/build-apk.yml`
-
-Substitua **todo** o conteúdo do arquivo `.github/workflows/build-apk.yml` por este YAML:
-
-```yaml
 name: Build & Release APK
 
 on:
@@ -88,12 +83,3 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-
-## Erros corrigidos nesse YAML
-
-1. troca `gradle assembleDebug` por `./gradlew assembleDebug`
-2. adiciona `chmod +x ./gradlew`
-3. corrige o `cp` para aceitar o nome real do APK com `*.apk`
-4. corrige o job de release para baixar o artifact em `release-artifacts`
-5. corrige o caminho do arquivo publicado na release para `release-artifacts/MeuGestor-v1.0.0-debug.apk`

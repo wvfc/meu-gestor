@@ -1,22 +1,58 @@
 package com.meugestor.app.ui.screens.cashflow
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Receipt
+import androidx.compose.material.icons.outlined.StickyNote2
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meugestor.app.MeuGestorApp
-import com.meugestor.app.data.database.entity.*
-import com.meugestor.app.ui.components.*
-import com.meugestor.app.ui.theme.*
+import com.meugestor.app.data.database.entity.TransactionEntity
+import com.meugestor.app.data.database.entity.TransactionStatus
+import com.meugestor.app.data.database.entity.TransactionType
+import com.meugestor.app.ui.components.EmptyState
+import com.meugestor.app.ui.components.StatusBadge
+import com.meugestor.app.ui.components.TypeFilterChips
+import com.meugestor.app.ui.theme.ExpenseRed
+import com.meugestor.app.ui.theme.IncomeGreen
 import com.meugestor.app.util.CurrencyUtils
 import com.meugestor.app.util.DateUtils
 
@@ -29,13 +65,16 @@ fun CashFlowScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
     val state by viewModel.uiState.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Summary bar
         Card(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -68,7 +107,6 @@ fun CashFlowScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
             }
         }
 
-        // Filter chips
         TypeFilterChips(
             options = listOf(
                 "ALL" to "Todos",
@@ -81,7 +119,6 @@ fun CashFlowScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
             modifier = Modifier.padding(horizontal = 16.dp)
         )
 
-        // Search
         OutlinedTextField(
             value = state.searchQuery,
             onValueChange = { viewModel.setSearchQuery(it) },
@@ -94,11 +131,12 @@ fun CashFlowScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
                     }
                 }
             },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             singleLine = true
         )
 
-        // Transactions list
         if (state.filteredTransactions.isEmpty() && !state.isLoading) {
             EmptyState(
                 icon = Icons.Outlined.Receipt,
@@ -126,13 +164,14 @@ fun CashFlowScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
                     items(transactions) { tx ->
                         CashFlowTransactionItem(tx)
                     }
-                    item { HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp)) }
+                    item {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    }
                 }
             }
         }
     }
 
-    // Add transaction dialog
     if (state.showAddDialog) {
         AddTransactionDialog(
             onDismiss = { viewModel.toggleAddDialog() },
@@ -144,14 +183,21 @@ fun CashFlowScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
 @Composable
 private fun CashFlowTransactionItem(transaction: TransactionEntity) {
     val isIncome = transaction.type == TransactionType.INCOME
+
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
             modifier = Modifier.size(40.dp),
             shape = MaterialTheme.shapes.small,
-            color = if (isIncome) IncomeGreen.copy(alpha = 0.12f) else ExpenseRed.copy(alpha = 0.12f)
+            color = if (isIncome) {
+                IncomeGreen.copy(alpha = 0.12f)
+            } else {
+                ExpenseRed.copy(alpha = 0.12f)
+            }
         ) {
             Icon(
                 imageVector = if (isIncome) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
@@ -160,9 +206,15 @@ private fun CashFlowTransactionItem(transaction: TransactionEntity) {
                 tint = if (isIncome) IncomeGreen else ExpenseRed
             )
         }
+
         Spacer(modifier = Modifier.width(12.dp))
+
         Column(modifier = Modifier.weight(1f)) {
-            Text(transaction.description, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+            Text(
+                transaction.description,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     DateUtils.formatDate(transaction.date),
@@ -171,11 +223,16 @@ private fun CashFlowTransactionItem(transaction: TransactionEntity) {
                 )
                 if (transaction.notes?.isNotEmpty() == true) {
                     Spacer(modifier = Modifier.width(8.dp))
-                    Icon(Icons.Outlined.StickyNote2, null, modifier = Modifier.size(12.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(
+                        Icons.Outlined.StickyNote2,
+                        null,
+                        modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
+
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = "${if (isIncome) "+" else "-"} ${CurrencyUtils.formatBRL(transaction.amount)}",
@@ -218,6 +275,7 @@ private fun AddTransactionDialog(
                         modifier = Modifier.weight(1f)
                     )
                 }
+
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
@@ -225,9 +283,12 @@ private fun AddTransactionDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 OutlinedTextField(
                     value = amount,
-                    onValueChange = { amount = it.filter { c -> c.isDigit() || c == '.' || c == ',' } },
+                    onValueChange = {
+                        amount = it.filter { c -> c.isDigit() || c == '.' || c == ',' }
+                    },
                     label = { Text("Valor (R$)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -253,10 +314,14 @@ private fun AddTransactionDialog(
                     )
                 },
                 enabled = description.isNotBlank() && amount.isNotBlank()
-            ) { Text("Adicionar") }
+            ) {
+                Text("Adicionar")
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
         }
     )
 }

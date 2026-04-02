@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.meugestor.app.ui.screens.onboarding
 
 import androidx.compose.animation.AnimatedVisibility

@@ -22,41 +22,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.meugestor.app.data.database.entity.TransactionStatus
+import com.meugestor.app.data.database.entity.TransactionType
 import com.meugestor.app.ui.theme.ExpenseRed
 import com.meugestor.app.ui.theme.IncomeGreen
 import com.meugestor.app.util.CurrencyUtils
 
-/**
- * Tipo de transação.
- */
-enum class TransactionType {
-    INCOME,  // Receita
-    EXPENSE  // Despesa
-}
-
-/**
- * Status da transação.
- */
-enum class TransactionStatus(val label: String) {
-    PAID("Pago"),
-    PENDING("Pendente"),
-    OVERDUE("Atrasado"),
-    CANCELLED("Cancelado")
-}
-
-/**
- * Item de lista para exibir uma transação.
- *
- * @param description Descrição da transação.
- * @param category Nome da categoria.
- * @param categoryColor Cor da categoria (exibida no círculo).
- * @param date Data formatada.
- * @param amount Valor da transação.
- * @param type Tipo: receita ou despesa.
- * @param status Status da transação.
- * @param modifier Modifier do Compose.
- * @param onClick Callback ao clicar no item.
- */
 @Composable
 fun TransactionItem(
     description: String,
@@ -69,21 +40,14 @@ fun TransactionItem(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null
 ) {
-    val containerModifier = if (onClick != null) {
-        modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    } else {
-        modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    }
+    val containerModifier = modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp, vertical = 8.dp)
 
     Row(
         modifier = containerModifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Círculo com cor da categoria
         Box(
             modifier = Modifier
                 .size(40.dp)
@@ -101,7 +65,6 @@ fun TransactionItem(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        // Descrição e categoria
         Column(
             modifier = Modifier.weight(1f)
         ) {
@@ -123,7 +86,7 @@ fun TransactionItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = " \u2022 ",
+                    text = " • ",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -137,18 +100,18 @@ fun TransactionItem(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // Valor e status
         Column(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.Center
         ) {
             val amountColor = when (type) {
                 TransactionType.INCOME -> IncomeGreen
-                TransactionType.EXPENSE -> ExpenseRed
+                else -> ExpenseRed
             }
+
             val prefix = when (type) {
                 TransactionType.INCOME -> "+ "
-                TransactionType.EXPENSE -> "- "
+                else -> "- "
             }
 
             Text(
@@ -158,7 +121,7 @@ fun TransactionItem(
                 color = amountColor
             )
             Spacer(modifier = Modifier.height(4.dp))
-            StatusBadge(status = status)
+            StatusBadge(status = status.name)
         }
     }
 }

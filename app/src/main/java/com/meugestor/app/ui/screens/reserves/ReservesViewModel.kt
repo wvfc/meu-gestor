@@ -6,7 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.meugestor.app.data.database.entity.AccountEntity
 import com.meugestor.app.data.database.entity.AccountType
 import com.meugestor.app.data.repository.AccountRepository
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class ReservesUiState(
@@ -18,7 +21,9 @@ data class ReservesUiState(
     val totalCash: Double = 0.0,
     val totalEmergency: Double = 0.0,
     val isLoading: Boolean = true,
-    val showAddDialog: Boolean = false
+    val showAddDialog: Boolean = false,
+    val showAdjustDialog: Boolean = false,
+    val accountToAdjust: AccountEntity? = null
 )
 
 class ReservesViewModel(
@@ -28,7 +33,9 @@ class ReservesViewModel(
     private val _uiState = MutableStateFlow(ReservesUiState())
     val uiState: StateFlow<ReservesUiState> = _uiState.asStateFlow()
 
-    init { loadAccounts() }
+    init {
+        loadAccounts()
+    }
 
     private fun loadAccounts() {
         viewModelScope.launch {
@@ -66,6 +73,22 @@ class ReservesViewModel(
         viewModelScope.launch { accountRepository.delete(account) }
     }
 
+    fun openAdjustDialog(account: AccountEntity) {
+        _uiState.update { it.copy(showAdjustDialog = true, accountToAdjust = account) }
+    }
+
+    fun closeAdjustDialog() {
+        _uiState.update { it.copy(showAdjustDialog = false, accountToAdjust = null) }
+    }
+
+    fun saveAdjustedBalance(newBalance: Double) {
+        val account = _uiState.value.accountToAdjust ?: return
+        viewModelScope.launch {
+            accountRepository.update(account.copy(balance = newBalance))
+            closeAdjustDialog()
+        }
+    }
+
     fun toggleAddDialog() {
         _uiState.update { it.copy(showAddDialog = !it.showAddDialog) }
     }
@@ -74,7 +97,8 @@ class ReservesViewModel(
         private val accountRepository: AccountRepository
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            ReservesViewModel(accountRepository) as T
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            return ReservesViewModel(accountRepository) as T
+        }
     }
 }

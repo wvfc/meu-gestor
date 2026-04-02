@@ -1,15 +1,6 @@
 package com.meugestor.app.ui.screens.cashflow
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -19,32 +10,16 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.StickyNote2
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meugestor.app.MeuGestorApp
+import com.meugestor.app.data.database.entity.AccountEntity
+import com.meugestor.app.data.database.entity.CategoryEntity
 import com.meugestor.app.data.database.entity.TransactionEntity
 import com.meugestor.app.data.database.entity.TransactionStatus
 import com.meugestor.app.data.database.entity.TransactionType
@@ -63,6 +38,9 @@ fun CashFlowScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
         factory = CashFlowViewModel.Factory(app.transactionRepository)
     )
     val state by viewModel.uiState.collectAsState()
+    val accounts by app.accountRepository.getAllAccounts().collectAsState(initial = emptyList())
+    val incomeCategories by app.categoryRepository.getByType("INCOME").collectAsState(initial = emptyList())
+    val expenseCategories by app.categoryRepository.getByType("EXPENSE").collectAsState(initial = emptyList())
 
     Column(modifier = Modifier.fillMaxSize()) {
         Card(
@@ -79,30 +57,15 @@ fun CashFlowScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Entradas", style = MaterialTheme.typography.labelSmall)
-                    Text(
-                        CurrencyUtils.formatBRL(state.totalIncome),
-                        color = IncomeGreen,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Text(CurrencyUtils.formatBRL(state.totalIncome), color = IncomeGreen, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Saídas", style = MaterialTheme.typography.labelSmall)
-                    Text(
-                        CurrencyUtils.formatBRL(state.totalExpense),
-                        color = ExpenseRed,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Text(CurrencyUtils.formatBRL(state.totalExpense), color = ExpenseRed, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Saldo", style = MaterialTheme.typography.labelSmall)
-                    Text(
-                        CurrencyUtils.formatBRL(state.balance),
-                        color = if (state.balance >= 0) IncomeGreen else ExpenseRed,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Text(CurrencyUtils.formatBRL(state.balance), color = if (state.balance >= 0) IncomeGreen else ExpenseRed, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -126,14 +89,10 @@ fun CashFlowScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
             leadingIcon = { Icon(Icons.Default.Search, null) },
             trailingIcon = {
                 if (state.searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                        Icon(Icons.Default.Clear, null)
-                    }
+                    IconButton(onClick = { viewModel.setSearchQuery("") }) { Icon(Icons.Default.Clear, null) }
                 }
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             singleLine = true
         )
 
@@ -161,12 +120,8 @@ fun CashFlowScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
                     }
-                    items(transactions) { tx ->
-                        CashFlowTransactionItem(tx)
-                    }
-                    item {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    }
+                    items(transactions) { tx -> CashFlowTransactionItem(tx) }
+                    item { HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp)) }
                 }
             }
         }
@@ -174,6 +129,9 @@ fun CashFlowScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
 
     if (state.showAddDialog) {
         AddTransactionDialog(
+            accounts = accounts,
+            incomeCategories = incomeCategories,
+            expenseCategories = expenseCategories,
             onDismiss = { viewModel.toggleAddDialog() },
             onAdd = { viewModel.addTransaction(it) }
         )
@@ -183,21 +141,14 @@ fun CashFlowScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
 @Composable
 private fun CashFlowTransactionItem(transaction: TransactionEntity) {
     val isIncome = transaction.type == TransactionType.INCOME
-
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
             modifier = Modifier.size(40.dp),
             shape = MaterialTheme.shapes.small,
-            color = if (isIncome) {
-                IncomeGreen.copy(alpha = 0.12f)
-            } else {
-                ExpenseRed.copy(alpha = 0.12f)
-            }
+            color = if (isIncome) IncomeGreen.copy(alpha = 0.12f) else ExpenseRed.copy(alpha = 0.12f)
         ) {
             Icon(
                 imageVector = if (isIncome) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
@@ -206,33 +157,17 @@ private fun CashFlowTransactionItem(transaction: TransactionEntity) {
                 tint = if (isIncome) IncomeGreen else ExpenseRed
             )
         }
-
         Spacer(modifier = Modifier.width(12.dp))
-
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                transaction.description,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1
-            )
+            Text(transaction.description, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    DateUtils.formatDate(transaction.date),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(DateUtils.formatDate(transaction.date), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (transaction.notes?.isNotEmpty() == true) {
                     Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        Icons.Outlined.StickyNote2,
-                        null,
-                        modifier = Modifier.size(12.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Icon(Icons.Outlined.StickyNote2, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
-
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = "${if (isIncome) "+" else "-"} ${CurrencyUtils.formatBRL(transaction.amount)}",
@@ -248,6 +183,9 @@ private fun CashFlowTransactionItem(transaction: TransactionEntity) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddTransactionDialog(
+    accounts: List<AccountEntity>,
+    incomeCategories: List<CategoryEntity>,
+    expenseCategories: List<CategoryEntity>,
     onDismiss: () -> Unit,
     onAdd: (TransactionEntity) -> Unit
 ) {
@@ -255,57 +193,57 @@ private fun AddTransactionDialog(
     var amount by remember { mutableStateOf("") }
     var isIncome by remember { mutableStateOf(true) }
 
+    val categories = if (isIncome) incomeCategories else expenseCategories
+    var selectedAccountId by remember(accounts) { mutableStateOf(accounts.firstOrNull()?.id) }
+    var selectedCategoryId by remember(categories) { mutableStateOf(categories.firstOrNull()?.id) }
+
+    LaunchedEffect(accounts, categories, isIncome) {
+        if (selectedAccountId !in accounts.map { it.id }) selectedAccountId = accounts.firstOrNull()?.id
+        if (selectedCategoryId !in categories.map { it.id }) selectedCategoryId = categories.firstOrNull()?.id
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Novo Lançamento") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row {
-                    FilterChip(
-                        selected = isIncome,
-                        onClick = { isIncome = true },
-                        label = { Text("Receita") },
-                        modifier = Modifier.weight(1f)
-                    )
+                    FilterChip(selected = isIncome, onClick = { isIncome = true }, label = { Text("Receita") }, modifier = Modifier.weight(1f))
                     Spacer(modifier = Modifier.width(8.dp))
-                    FilterChip(
-                        selected = !isIncome,
-                        onClick = { isIncome = false },
-                        label = { Text("Despesa") },
-                        modifier = Modifier.weight(1f)
-                    )
+                    FilterChip(selected = !isIncome, onClick = { isIncome = false }, label = { Text("Despesa") }, modifier = Modifier.weight(1f))
                 }
-
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Descrição") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = {
-                        amount = it.filter { c -> c.isDigit() || c == '.' || c == ',' }
-                    },
-                    label = { Text("Valor (R$)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Descrição") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = amount, onValueChange = { amount = it.filter { c -> c.isDigit() || c == '.' || c == ',' } }, label = { Text("Valor (R$)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Text("Conta:", style = MaterialTheme.typography.labelMedium)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    accounts.forEach { account ->
+                        FilterChip(selected = selectedAccountId == account.id, onClick = { selectedAccountId = account.id }, label = { Text(account.name) })
+                    }
+                }
+                Text("Categoria:", style = MaterialTheme.typography.labelMedium)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    categories.forEach { category ->
+                        FilterChip(selected = selectedCategoryId == category.id, onClick = { selectedCategoryId = category.id }, label = { Text(category.name) })
+                    }
+                }
+                if (accounts.isEmpty() || categories.isEmpty()) {
+                    Text("Cadastre ao menos uma conta e uma categoria válida antes de lançar.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
                     val value = amount.replace(",", ".").toDoubleOrNull() ?: return@Button
+                    val accountId = selectedAccountId ?: return@Button
+                    val categoryId = selectedCategoryId ?: return@Button
                     onAdd(
                         TransactionEntity(
                             type = if (isIncome) TransactionType.INCOME else TransactionType.EXPENSE,
                             description = description,
                             amount = value,
-                            categoryId = 1,
-                            accountId = 1,
+                            categoryId = categoryId,
+                            accountId = accountId,
                             date = DateUtils.today(),
                             status = TransactionStatus.PAID,
                             createdAt = DateUtils.today(),
@@ -313,15 +251,9 @@ private fun AddTransactionDialog(
                         )
                     )
                 },
-                enabled = description.isNotBlank() && amount.isNotBlank()
-            ) {
-                Text("Adicionar")
-            }
+                enabled = description.isNotBlank() && amount.isNotBlank() && selectedAccountId != null && selectedCategoryId != null && accounts.isNotEmpty() && categories.isNotEmpty()
+            ) { Text("Adicionar") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
 }

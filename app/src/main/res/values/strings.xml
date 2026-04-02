@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Meu Gestor</string>
+
+    <!-- Navegação -->
+    <string name="nav_dashboard">Painel</string>
+    <string name="nav_transactions">Transações</string>
+    <string name="nav_categories">Categorias</string>
+    <string name="nav_reports">Relatórios</string>
+    <string name="nav_settings">Configurações</string>
+
+    <!-- Ações comuns -->
+    <string name="action_save">Salvar</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_delete">Excluir</string>
+    <string name="action_edit">Editar</string>
+    <string name="action_add">Adicionar</string>
+    <string name="action_search">Buscar</string>
+    <string name="action_filter">Filtrar</string>
+    <string name="action_share">Compartilhar</string>
+    <string name="action_confirm">Confirmar</string>
+    <string name="action_back">Voltar</string>
+
+    <!-- Transações -->
+    <string name="transaction_income">Receita</string>
+    <string name="transaction_expense">Despesa</string>
+    <string name="transaction_description">Descrição</string>
+    <string name="transaction_amount">Valor</string>
+    <string name="transaction_date">Data</string>
+    <string name="transaction_category">Categoria</string>
+    <string name="transaction_receipt">Comprovante</string>
+    <string name="transaction_add_receipt">Anexar comprovante</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_balance">Saldo</string>
+    <string name="dashboard_total_income">Total de Receitas</string>
+    <string name="dashboard_total_expense">Total de Despesas</string>
+    <string name="dashboard_recent">Transações Recentes</string>
+
+    <!-- Configurações -->
+    <string name="settings_currency">Moeda</string>
+    <string name="settings_notifications">Notificações</string>
+    <string name="settings_theme">Tema</string>
+    <string name="settings_backup">Backup</string>
+    <string name="settings_about">Sobre</string>
+
+    <!-- Mensagens -->
+    <string name="msg_no_transactions">Nenhuma transação encontrada</string>
+    <string name="msg_delete_confirm">Tem certeza que deseja excluir?</string>
+    <string name="msg_saved_success">Salvo com sucesso</string>
+    <string name="msg_deleted_success">Excluído com sucesso</string>
+    <string name="msg_error_generic">Ocorreu um erro. Tente novamente.</string>
+    <string name="msg_field_required">Campo obrigatório</string>
+    <string name="msg_invalid_amount">Valor inválido</string>
+
+    <!-- Permissões -->
+    <string name="permission_camera_title">Permissão da Câmera</string>
+    <string name="permission_camera_message">Precisamos da permissão da câmera para fotografar comprovantes.</string>
+    <string name="permission_notification_title">Permissão de Notificações</string>
+    <string name="permission_notification_message">Ative as notificações para receber lembretes.</string>
+</resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MeuGestor" parent="Theme.Material3.Light.NoActionBar">
+        <!-- Primary -->
+        <item name="colorPrimary">@color/emerald_green</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimaryContainer">@color/emerald_green_light</item>
+        <item name="colorOnPrimaryContainer">@color/emerald_green_dark</item>
+
+        <!-- Secondary -->
+        <item name="colorSecondary">@color/petrol_blue</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <item name="colorSecondaryContainer">@color/petrol_blue_light</item>
+        <item name="colorOnSecondaryContainer">@color/petrol_blue_dark</item>
+
+        <!-- Tertiary -->
+        <item name="colorTertiary">@color/gold_accent</item>
+        <item name="colorOnTertiary">@color/black</item>
+        <item name="colorTertiaryContainer">@color/gold_accent_light</item>
+        <item name="colorOnTertiaryContainer">@color/gold_accent_dark</item>
+
+        <!-- Background & Surface -->
+        <item name="android:colorBackground">@color/background</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorSurfaceVariant">@color/surface_variant</item>
+
+        <!-- Status bar -->
+        <item name="android:statusBarColor">@color/emerald_green_dark</item>
+        <item name="android:navigationBarColor">@color/white</item>
+    </style>
+</resources>

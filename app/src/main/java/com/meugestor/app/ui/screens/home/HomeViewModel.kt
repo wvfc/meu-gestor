@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.meugestor.app.data.database.entity.TransactionEntity
+import com.meugestor.app.data.database.entity.TransactionType
 import com.meugestor.app.data.repository.AccountRepository
 import com.meugestor.app.data.repository.TransactionRepository
 import com.meugestor.app.util.DateUtils
@@ -57,8 +58,8 @@ class HomeViewModel(
         }
         viewModelScope.launch {
             transactionRepository.getByDateRange(startOfMonth, endOfMonth).collect { list ->
-                val income = list.filter { it.type.name == "INCOME" }.sumOf { it.amount }
-                val expense = list.filter { it.type.name == "EXPENSE" }.sumOf { it.amount }
+                val income = list.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+                val expense = list.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
                 _uiState.update {
                     it.copy(
                         monthlyIncome = income,

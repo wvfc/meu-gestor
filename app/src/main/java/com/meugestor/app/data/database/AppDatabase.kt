@@ -65,9 +65,25 @@ abstract class AppDatabase : RoomDatabase() {
                 INSTANCE?.let { database ->
                     CoroutineScope(Dispatchers.IO).launch {
                         prepopulateCategories(database.categoryDao())
+                        prepopulateAccounts(database.accountDao())
                     }
                 }
             }
+        }
+
+        private suspend fun prepopulateAccounts(accountDao: AccountDao) {
+            accountDao.insert(
+                AccountEntity(
+                    name = "Conta Principal",
+                    bankName = "Minha Conta",
+                    accountType = AccountType.CHECKING,
+                    balance = 0.0,
+                    initialBalance = 0.0,
+                    color = "#2E7D32",
+                    icon = "account_balance",
+                    createdAt = "2024-01-01"
+                )
+            )
         }
 
         private suspend fun prepopulateCategories(categoryDao: CategoryDao) {

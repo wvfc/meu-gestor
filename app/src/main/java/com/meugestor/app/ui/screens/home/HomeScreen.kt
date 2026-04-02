@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meugestor.app.MeuGestorApp
+import com.meugestor.app.data.database.entity.TransactionType
 import com.meugestor.app.ui.components.EmptyState
 import com.meugestor.app.ui.components.StatusBadge
 import com.meugestor.app.ui.navigation.Screen
@@ -274,7 +275,7 @@ private fun DueItemCard(transaction: com.meugestor.app.data.database.entity.Tran
 
 @Composable
 private fun TransactionListItem(transaction: com.meugestor.app.data.database.entity.TransactionEntity) {
-    val isIncome = transaction.type.name == "INCOME"
+    val isIncome = transaction.type == TransactionType.INCOME
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically

@@ -21,6 +21,7 @@ class UserPreferences(private val context: Context) {
         val DEFAULT_CURRENCY = stringPreferencesKey("default_currency")
         val PIN_CODE = stringPreferencesKey("pin_code")
         val LAST_BACKUP_DATE = stringPreferencesKey("last_backup_date")
+        val IS_BIOMETRIC_ENABLED = booleanPreferencesKey("is_biometric_enabled")
     }
 
     val isDarkMode: Flow<Boolean> = context.dataStore.data
@@ -40,6 +41,9 @@ class UserPreferences(private val context: Context) {
 
     val lastBackupDate: Flow<String> = context.dataStore.data
         .map { preferences -> preferences[Keys.LAST_BACKUP_DATE] ?: "" }
+
+    val isBiometricEnabled: Flow<Boolean> = context.dataStore.data
+        .map { preferences -> preferences[Keys.IS_BIOMETRIC_ENABLED] ?: false }
 
     suspend fun setDarkMode(isDarkMode: Boolean) {
         context.dataStore.edit { preferences ->
@@ -77,19 +81,15 @@ class UserPreferences(private val context: Context) {
         }
     }
 
+    suspend fun setBiometricEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.IS_BIOMETRIC_ENABLED] = enabled
+        }
+    }
+
     suspend fun clearAll() {
         context.dataStore.edit { preferences ->
             preferences.clear()
         }
     }
-    val IS_BIOMETRIC_ENABLED = booleanPreferencesKey("is_biometric_enabled")
-
-val isBiometricEnabled: Flow<Boolean> = context.dataStore.data
-    .map { preferences -> preferences[Keys.IS_BIOMETRIC_ENABLED] ?: false }
-
-suspend fun setBiometricEnabled(enabled: Boolean) {
-    context.dataStore.edit { preferences ->
-        preferences[Keys.IS_BIOMETRIC_ENABLED] = enabled
-    }
-}
 }

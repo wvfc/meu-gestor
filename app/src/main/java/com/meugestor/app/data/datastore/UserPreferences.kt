@@ -82,4 +82,14 @@ class UserPreferences(private val context: Context) {
             preferences.clear()
         }
     }
+    val IS_BIOMETRIC_ENABLED = booleanPreferencesKey("is_biometric_enabled")
+
+val isBiometricEnabled: Flow<Boolean> = context.dataStore.data
+    .map { preferences -> preferences[Keys.IS_BIOMETRIC_ENABLED] ?: false }
+
+suspend fun setBiometricEnabled(enabled: Boolean) {
+    context.dataStore.edit { preferences ->
+        preferences[Keys.IS_BIOMETRIC_ENABLED] = enabled
+    }
+}
 }

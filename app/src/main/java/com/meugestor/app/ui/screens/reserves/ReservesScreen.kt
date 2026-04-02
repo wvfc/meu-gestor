@@ -29,6 +29,7 @@ fun ReservesScreen(app: MeuGestorApp) {
         factory = ReservesViewModel.Factory(app.accountRepository)
     )
     val state by viewModel.uiState.collectAsState()
+    val accountToAdjust = state.accountToAdjust
 
     Scaffold(
         floatingActionButton = {
@@ -98,12 +99,14 @@ fun ReservesScreen(app: MeuGestorApp) {
         AddAccountDialog(onDismiss = { viewModel.toggleAddDialog() }, onAdd = { viewModel.addAccount(it) })
     }
 
-    if (state.showAdjustDialog && state.accountToAdjust != null) {
-        AdjustBalanceDialog(
-            account = state.accountToAdjust,
-            onDismiss = { viewModel.closeAdjustDialog() },
-            onSave = { viewModel.saveAdjustedBalance(it) }
-        )
+    if (state.showAdjustDialog) {
+        accountToAdjust?.let { currentAccount ->
+            AdjustBalanceDialog(
+                account = currentAccount,
+                onDismiss = { viewModel.closeAdjustDialog() },
+                onSave = { viewModel.saveAdjustedBalance(it) }
+            )
+        }
     }
 }
 

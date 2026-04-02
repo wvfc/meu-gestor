@@ -95,16 +95,20 @@ fun ReservesScreen(app: MeuGestorApp) {
     }
 
     if (state.showAddDialog) {
-        AddAccountDialog(onDismiss = { viewModel.toggleAddDialog() }, onAdd = { viewModel.addAccount(it) })
-    }
+    AddAccountDialog(
+        onDismiss = { viewModel.toggleAddDialog() },
+        onAdd = { viewModel.addAccount(it) }
+    )
+}
 
-    if (state.showAdjustDialog && state.accountToAdjust != null) {
-        AdjustBalanceDialog(
-            account = state.accountToAdjust,
-            onDismiss = { viewModel.closeAdjustDialog() },
-            onSave = { viewModel.saveAdjustedBalance(it) }
-        )
-    }
+val accountToAdjust = state.accountToAdjust
+if (state.showAdjustDialog && accountToAdjust != null) {
+    AdjustBalanceDialog(
+        account = accountToAdjust,
+        onDismiss = { viewModel.closeAdjustDialog() },
+        onSave = { viewModel.saveAdjustedBalance(it) }
+    )
+}
 }
 
 @Composable

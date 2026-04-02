@@ -1,0 +1,80 @@
+name: Build & Release APK (Manual Fixed)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Create local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Grant execute permission
+        run: chmod +x ./gradlew
+
+      - name: Show Java and Gradle
+        run: |
+          java -version
+          ./gradlew -version
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: |
+          mkdir -p artifacts
+          cp app/build/outputs/apk/debug/*.apk artifacts/MeuGestor-v1.0.0-debug.apk
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MeuGestor-debug-apk-manual-fixed
+          path: artifacts/MeuGestor-v1.0.0-debug.apk
+          retention-days: 90
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: MeuGestor-debug-apk-manual-fixed
+          path: release-artifacts
+
+      - name: Get date
+        id: date
+        run: echo "date=$(date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
+
+      - name: Create Release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0-manual-build.${{ steps.date.outputs.date }}
+          name: "Meu Gestor v1.0.0 (Manual Build ${{ steps.date.outputs.date }})"
+          body: |
+            APK gerado pelo workflow manual corrigido.
+          files: release-artifacts/MeuGestor-v1.0.0-debug.apk
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

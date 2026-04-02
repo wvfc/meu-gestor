@@ -1,0 +1,99 @@
+# Correção final do workflow `.github/workflows/build-apk.yml`
+
+Substitua **todo** o conteúdo do arquivo `.github/workflows/build-apk.yml` por este YAML:
+
+```yaml
+name: Build & Release APK
+
+on:
+  push:
+    branches: [ main, 'claude/*' ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Create local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Grant execute permission
+        run: chmod +x ./gradlew
+
+      - name: Show Java and Gradle
+        run: |
+          java -version
+          ./gradlew -version
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: |
+          mkdir -p artifacts
+          cp app/build/outputs/apk/debug/*.apk artifacts/MeuGestor-v1.0.0-debug.apk
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MeuGestor-debug-apk
+          path: artifacts/MeuGestor-v1.0.0-debug.apk
+          retention-days: 90
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: MeuGestor-debug-apk
+          path: release-artifacts
+
+      - name: Get date
+        id: date
+        run: echo "date=$(date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
+
+      - name: Create Release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0-build.${{ steps.date.outputs.date }}
+          name: "Meu Gestor v1.0.0 (Build ${{ steps.date.outputs.date }})"
+          body: |
+            ## 📱 Meu Gestor - Gestão Financeira Pessoal
+
+            APK pronto para instalar no seu Android.
+          files: release-artifacts/MeuGestor-v1.0.0-debug.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+## Erros corrigidos nesse YAML
+
+1. troca `gradle assembleDebug` por `./gradlew assembleDebug`
+2. adiciona `chmod +x ./gradlew`
+3. corrige o `cp` para aceitar o nome real do APK com `*.apk`
+4. corrige o job de release para baixar o artifact em `release-artifacts`
+5. corrige o caminho do arquivo publicado na release para `release-artifacts/MeuGestor-v1.0.0-debug.apk`

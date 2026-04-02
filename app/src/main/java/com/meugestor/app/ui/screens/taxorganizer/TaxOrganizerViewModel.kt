@@ -93,6 +93,7 @@ class TaxOrganizerViewModel(
             TaxCategory("PENSAO","Pensão Alimentícia","Pensão judicial ou por acordo homologado","Dedutível integralmente quando judicial","⚖️"),
             TaxCategory("BENS_DIREITOS","Bens e Direitos","Imóveis, veículos, investimentos","Declarar com valor de aquisição em 31/12","🏠"),
             TaxCategory("DIVIDAS","Dívidas e Ônus","Financiamentos, empréstimos acima de R$ 5.000","Declarar com saldo devedor","💳"),
+            TaxCategory("DESPESAS_PROFISSIONAIS","Despesas Profissionais","Despesas de autônomos e profissionais liberais","Dedutíveis via livro-caixa (aluguel, materiais, etc.)","💼"),
             TaxCategory("DOACOES","Doações","Doações incentivadas (ECA, idoso, cultura, esporte)","Dedutíveis até 6% do imposto devido","🤝"),
             TaxCategory("INVESTIMENTOS","Investimentos","Ações, fundos, CDB, tesouro direto","Informar posição em 31/12 e ganhos/perdas","📈"),
             TaxCategory("ALUGUEL","Aluguel","Aluguel pago ou recebido","Recebido: tributável. Pago: dedutível em livro-caixa","🏢"),

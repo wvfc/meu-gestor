@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 package com.meugestor.app.ui.screens.creditcards
 
 import androidx.compose.foundation.background

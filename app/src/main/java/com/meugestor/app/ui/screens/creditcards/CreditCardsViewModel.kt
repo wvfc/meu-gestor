@@ -8,13 +8,13 @@ import com.meugestor.app.data.database.entity.TransactionEntity
 import com.meugestor.app.data.database.entity.TransactionStatus
 import com.meugestor.app.data.repository.CreditCardRepository
 import com.meugestor.app.data.repository.TransactionRepository
+import com.meugestor.app.util.DateUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import com.meugestor.app.util.DateUtils
 
 data class CreditCardWithDetails(
     val card: CreditCardEntity,
@@ -35,19 +35,6 @@ data class CreditCardsUiState(
 class CreditCardsViewModel(
     private val creditCardRepository: CreditCardRepository,
     private val transactionRepository: TransactionRepository
-
-    fun updateTransactionStatus(transaction: TransactionEntity, newStatus: TransactionStatus) {
-    viewModelScope.launch {
-        transactionRepository.update(
-            transaction.copy(
-                status = newStatus,
-                paymentDate = if (newStatus == TransactionStatus.PAID) DateUtils.today() else null,
-                updatedAt = DateUtils.today()
-            )
-        )
-    }
-}
-    
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreditCardsUiState())
@@ -80,7 +67,9 @@ class CreditCardsViewModel(
                     )
                 }
 
-                val safeIndex = _uiState.value.selectedCardIndex.coerceIn(0, (details.size - 1).coerceAtLeast(0))
+                val safeIndex = _uiState.value.selectedCardIndex
+                    .coerceIn(0, (details.size - 1).coerceAtLeast(0))
+
                 val selectedTransactions = if (details.isNotEmpty()) {
                     allTransactions.filter { it.creditCardId == details[safeIndex].card.id }
                 } else {
@@ -119,8 +108,22 @@ class CreditCardsViewModel(
         }
     }
 
+    fun updateTransactionStatus(transaction: TransactionEntity, newStatus: TransactionStatus) {
+        viewModelScope.launch {
+            transactionRepository.update(
+                transaction.copy(
+                    status = newStatus,
+                    paymentDate = if (newStatus == TransactionStatus.PAID) DateUtils.today() else null,
+                    updatedAt = DateUtils.today()
+                )
+            )
+        }
+    }
+
     fun deleteCard(card: CreditCardEntity) {
-        viewModelScope.launch { creditCardRepository.delete(card) }
+        viewModelScope.launch {
+            creditCardRepository.delete(card)
+        }
     }
 
     fun toggleAddDialog() {

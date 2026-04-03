@@ -2,13 +2,13 @@ package com.meugestor.app.ui.navigation
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.meugestor.app.MeuGestorApp
@@ -27,6 +27,16 @@ fun MainScaffold(app: MeuGestorApp) {
     val currentTitle = Screen.bottomNavItems.find { it.route == currentRoute }?.title
         ?: Screen.drawerItems.find { it.route == currentRoute }?.title
         ?: "Meu Gestor"
+
+    fun navigateToTopLevel(route: String) {
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -49,11 +59,7 @@ fun MainScaffold(app: MeuGestorApp) {
                         selected = currentRoute == screen.route,
                         onClick = {
                             scope.launch { drawerState.close() }
-                            navController.navigate(screen.route) {
-                                popUpTo(Screen.Home.route) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                            navigateToTopLevel(screen.route)
                         },
                         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                     )
@@ -85,6 +91,7 @@ fun MainScaffold(app: MeuGestorApp) {
                             val selected = navBackStackEntry?.destination?.hierarchy?.any {
                                 it.route == screen.route
                             } == true
+
                             NavigationBarItem(
                                 icon = {
                                     Icon(
@@ -94,25 +101,9 @@ fun MainScaffold(app: MeuGestorApp) {
                                 },
                                 label = { Text(screen.title, style = MaterialTheme.typography.labelSmall) },
                                 selected = selected,
-                                onClick = {
-                                    navController.navigate(screen.route) {
-                                        popUpTo(Screen.Home.route) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
+                                onClick = { navigateToTopLevel(screen.route) }
                             )
                         }
-                    }
-                }
-            },
-            floatingActionButton = {
-                if (showBottomBar) {
-                    FloatingActionButton(
-                        onClick = { navController.navigate(Screen.CashFlow.route) },
-                        containerColor = MaterialTheme.colorScheme.primary
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Novo lançamento")
                     }
                 }
             }

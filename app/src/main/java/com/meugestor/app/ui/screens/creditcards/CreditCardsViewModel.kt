@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.meugestor.app.util.DateUtils
 
 data class CreditCardWithDetails(
     val card: CreditCardEntity,
@@ -34,6 +35,19 @@ data class CreditCardsUiState(
 class CreditCardsViewModel(
     private val creditCardRepository: CreditCardRepository,
     private val transactionRepository: TransactionRepository
+
+    fun updateTransactionStatus(transaction: TransactionEntity, newStatus: TransactionStatus) {
+    viewModelScope.launch {
+        transactionRepository.update(
+            transaction.copy(
+                status = newStatus,
+                paymentDate = if (newStatus == TransactionStatus.PAID) DateUtils.today() else null,
+                updatedAt = DateUtils.today()
+            )
+        )
+    }
+}
+    
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreditCardsUiState())

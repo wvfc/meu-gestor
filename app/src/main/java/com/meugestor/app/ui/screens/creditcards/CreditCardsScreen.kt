@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meugestor.app.MeuGestorApp
 import com.meugestor.app.data.database.entity.*
@@ -27,6 +28,10 @@ import com.meugestor.app.ui.components.StatusBadge
 import com.meugestor.app.ui.theme.*
 import com.meugestor.app.util.CurrencyUtils
 import com.meugestor.app.util.DateUtils
+
+private enum class CardTransactionFilter {
+    ALL, OPEN, PAID
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,9 +43,24 @@ fun CreditCardsScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
     val accounts by app.accountRepository.getAllAccounts().collectAsState(initial = emptyList())
     val expenseCategories by app.categoryRepository.getByType("EXPENSE").collectAsState(initial = emptyList())
     val pagerState = rememberPagerState { state.cards.size.coerceAtLeast(1) }
+    var transactionFilter by rememberSaveable { mutableStateOf(CardTransactionFilter.ALL) }
 
-    LaunchedEffect(pagerState.currentPage) {
-        viewModel.selectCard(pagerState.currentPage)
+    LaunchedEffect(pagerState.currentPage, state.cards.size) {
+        if (state.cards.isNotEmpty()) {
+            viewModel.selectCard(pagerState.currentPage.coerceAtMost(state.cards.lastIndex))
+        }
+    }
+
+    val filteredTransactions = remember(state.selectedCardTransactions, transactionFilter) {
+        when (transactionFilter) {
+            CardTransactionFilter.ALL -> state.selectedCardTransactions
+            CardTransactionFilter.OPEN -> state.selectedCardTransactions.filter {
+                it.status == TransactionStatus.PENDING || it.status == TransactionStatus.OVERDUE
+            }
+            CardTransactionFilter.PAID -> state.selectedCardTransactions.filter {
+                it.status == TransactionStatus.PAID
+            }
+        }
     }
 
     Scaffold(
@@ -61,10 +81,29 @@ fun CreditCardsScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
             )
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Seus cartões",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        OutlinedButton(onClick = { viewModel.toggleAddDialog() }) {
+                            Text("Novo cartão")
+                        }
+                    }
+                }
+
                 item {
                     HorizontalPager(
                         state = pagerState,
@@ -72,13 +111,19 @@ fun CreditCardsScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
                         pageSpacing = 16.dp
                     ) { page ->
                         if (page < state.cards.size) {
-                            CreditCardVisual(cardDetails = state.cards[page], modifier = Modifier.fillMaxWidth())
+                            CreditCardVisual(
+                                cardDetails = state.cards[page],
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
                 }
 
                 item {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
                         repeat(state.cards.size) { index ->
                             Box(
                                 modifier = Modifier
@@ -101,18 +146,55 @@ fun CreditCardsScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Lançamentos do Cartão", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Lançamentos do Cartão",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
                             TextButton(onClick = { viewModel.toggleExpenseDialog() }) {
                                 Text("Adicionar compra")
                             }
                         }
                     }
-                    if (state.selectedCardTransactions.isEmpty()) {
+
+                    item {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = transactionFilter == CardTransactionFilter.ALL,
+                                onClick = { transactionFilter = CardTransactionFilter.ALL },
+                                label = { Text("Todas") }
+                            )
+                            FilterChip(
+                                selected = transactionFilter == CardTransactionFilter.OPEN,
+                                onClick = { transactionFilter = CardTransactionFilter.OPEN },
+                                label = { Text("Em aberto") }
+                            )
+                            FilterChip(
+                                selected = transactionFilter == CardTransactionFilter.PAID,
+                                onClick = { transactionFilter = CardTransactionFilter.PAID },
+                                label = { Text("Pagas") }
+                            )
+                        }
+                    }
+
+                    if (filteredTransactions.isEmpty()) {
                         item {
-                            Text("Nenhum lançamento neste cartão", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 8.dp))
+                            Text(
+                                "Nenhum lançamento para este filtro",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
                         }
                     } else {
-                        items(state.selectedCardTransactions) { tx -> CardTransactionItem(tx) }
+                        items(filteredTransactions) { tx ->
+                            CardTransactionItem(
+                                transaction = tx,
+                                onToggleStatus = { newStatus ->
+                                    viewModel.updateTransactionStatus(tx, newStatus)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -120,7 +202,10 @@ fun CreditCardsScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
     }
 
     if (state.showAddDialog) {
-        AddCardDialog(onDismiss = { viewModel.toggleAddDialog() }, onAdd = { viewModel.addCard(it) })
+        AddCardDialog(
+            onDismiss = { viewModel.toggleAddDialog() },
+            onAdd = { viewModel.addCard(it) }
+        )
     }
 
     if (state.showExpenseDialog && state.cards.isNotEmpty()) {
@@ -177,26 +262,76 @@ private fun CreditCardVisual(cardDetails: CreditCardWithDetails, modifier: Modif
     }
 }
 
+
+
 @Composable
-private fun CardTransactionItem(transaction: TransactionEntity) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun CardTransactionItem(
+    transaction: TransactionEntity,
+    onToggleStatus: (TransactionStatus) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(transaction.description, style = MaterialTheme.typography.bodyMedium)
             Row {
-                Text(DateUtils.formatDate(transaction.date), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    DateUtils.formatDate(transaction.date),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 if (transaction.totalInstallments != null && transaction.totalInstallments > 1) {
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("${transaction.installmentNumber}/${transaction.totalInstallments}x", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        "${transaction.installmentNumber}/${transaction.totalInstallments}x",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
+
         Column(horizontalAlignment = Alignment.End) {
-            Text(CurrencyUtils.formatBRL(transaction.amount), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = ExpenseRed)
+            Text(
+                CurrencyUtils.formatBRL(transaction.amount),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = ExpenseRed
+            )
+            Spacer(modifier = Modifier.height(4.dp))
             StatusBadge(transaction.status.name)
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            AssistChip(
+                onClick = {
+                    onToggleStatus(
+                        if (transaction.status == TransactionStatus.PAID) {
+                            TransactionStatus.PENDING
+                        } else {
+                            TransactionStatus.PAID
+                        }
+                    )
+                },
+                label = {
+                    Text(
+                        if (transaction.status == TransactionStatus.PAID) {
+                            "Reabrir"
+                        } else {
+                            "Marcar pago"
+                        }
+                    )
+                }
+            )
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -254,29 +389,79 @@ private fun AddCardExpenseDialog(
     var installments by remember { mutableStateOf("1") }
     var selectedAccountId by remember(accounts) { mutableStateOf(accounts.firstOrNull()?.id) }
     var selectedCategoryId by remember(expenseCategories) { mutableStateOf(expenseCategories.firstOrNull()?.id) }
+    var selectedStatus by remember { mutableStateOf(TransactionStatus.PENDING) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Nova compra no cartão") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Descrição") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = amount, onValueChange = { amount = it.filter { c -> c.isDigit() || c == '.' || c == ',' } }, label = { Text("Valor (R$)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = installments, onValueChange = { installments = it.filter(Char::isDigit) }, label = { Text("Parcelas") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Descrição") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it.filter { c -> c.isDigit() || c == '.' || c == ',' } },
+                    label = { Text("Valor (R$)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = installments,
+                    onValueChange = { installments = it.filter(Char::isDigit) },
+                    label = { Text("Parcelas") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text("Status:", style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = selectedStatus == TransactionStatus.PENDING,
+                        onClick = { selectedStatus = TransactionStatus.PENDING },
+                        label = { Text("Em aberto") }
+                    )
+                    FilterChip(
+                        selected = selectedStatus == TransactionStatus.PAID,
+                        onClick = { selectedStatus = TransactionStatus.PAID },
+                        label = { Text("Pago") }
+                    )
+                }
+
                 Text("Conta de origem:", style = MaterialTheme.typography.labelMedium)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     accounts.forEach { account ->
-                        FilterChip(selected = selectedAccountId == account.id, onClick = { selectedAccountId = account.id }, label = { Text(account.name) })
+                        FilterChip(
+                            selected = selectedAccountId == account.id,
+                            onClick = { selectedAccountId = account.id },
+                            label = { Text(account.name) }
+                        )
                     }
                 }
+
                 Text("Categoria:", style = MaterialTheme.typography.labelMedium)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     expenseCategories.forEach { category ->
-                        FilterChip(selected = selectedCategoryId == category.id, onClick = { selectedCategoryId = category.id }, label = { Text(category.name) })
+                        FilterChip(
+                            selected = selectedCategoryId == category.id,
+                            onClick = { selectedCategoryId = category.id },
+                            label = { Text(category.name) }
+                        )
                     }
                 }
+
                 if (accounts.isEmpty() || expenseCategories.isEmpty()) {
-                    Text("Cadastre ao menos uma conta e uma categoria de despesa.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Cadastre ao menos uma conta e uma categoria de despesa.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         },
@@ -287,6 +472,7 @@ private fun AddCardExpenseDialog(
                     val totalInstallments = installments.toIntOrNull()?.coerceAtLeast(1) ?: 1
                     val accountId = selectedAccountId ?: return@Button
                     val categoryId = selectedCategoryId ?: return@Button
+
                     onAdd(
                         TransactionEntity(
                             type = TransactionType.EXPENSE,
@@ -296,7 +482,8 @@ private fun AddCardExpenseDialog(
                             accountId = accountId,
                             creditCardId = cardId,
                             date = DateUtils.today(),
-                            status = TransactionStatus.PENDING,
+                            status = selectedStatus,
+                            paymentDate = if (selectedStatus == TransactionStatus.PAID) DateUtils.today() else null,
                             installmentNumber = 1,
                             totalInstallments = totalInstallments,
                             createdAt = DateUtils.today(),
@@ -304,9 +491,18 @@ private fun AddCardExpenseDialog(
                         )
                     )
                 },
-                enabled = description.isNotBlank() && amount.isNotBlank() && selectedAccountId != null && selectedCategoryId != null && accounts.isNotEmpty() && expenseCategories.isNotEmpty()
-            ) { Text("Adicionar") }
+                enabled = description.isNotBlank() &&
+                    amount.isNotBlank() &&
+                    selectedAccountId != null &&
+                    selectedCategoryId != null &&
+                    accounts.isNotEmpty() &&
+                    expenseCategories.isNotEmpty()
+            ) {
+                Text("Adicionar")
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
     )
 }

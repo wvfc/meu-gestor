@@ -1,9 +1,12 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.meugestor.app.ui.screens.reserves
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -13,11 +16,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meugestor.app.MeuGestorApp
 import com.meugestor.app.data.database.entity.AccountEntity
 import com.meugestor.app.data.database.entity.AccountType
+import com.meugestor.app.ui.components.ConfirmDialog
 import com.meugestor.app.ui.components.EmptyState
 import com.meugestor.app.ui.theme.*
 import com.meugestor.app.util.CurrencyUtils
@@ -31,6 +36,7 @@ fun ReservesScreen(app: MeuGestorApp) {
     val state by viewModel.uiState.collectAsState()
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(onClick = { viewModel.toggleAddDialog() }) {
                 Icon(Icons.Default.Add, "Nova Conta")
@@ -39,7 +45,7 @@ fun ReservesScreen(app: MeuGestorApp) {
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
@@ -67,7 +73,7 @@ fun ReservesScreen(app: MeuGestorApp) {
                         Triple("Dinheiro Físico", state.totalCash, Color(0xFFAB47BC)),
                         Triple("Reserva de Emergência", state.totalEmergency, EmeraldGreenDark)
                     ).forEach { (label, value, color) ->
-                        if (value > 0) ReserveSummaryRow(label, value, (value / total * 100).toFloat(), color)
+                        if (value != 0.0) ReserveSummaryRow(label, value, (value / total * 100).toFloat(), color)
                     }
                 }
             }
@@ -87,7 +93,14 @@ fun ReservesScreen(app: MeuGestorApp) {
                     )
                 }
             } else {
-                items(state.accounts) { account ->
+                item {
+                    Text(
+                        "Toque em uma conta para ajustar o saldo ou excluí-la.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                items(state.accounts, key = { it.id }) { account ->
                     AccountCard(account = account, onAdjustClick = { viewModel.openAdjustDialog(account) })
                 }
             }
@@ -95,20 +108,21 @@ fun ReservesScreen(app: MeuGestorApp) {
     }
 
     if (state.showAddDialog) {
-    AddAccountDialog(
-        onDismiss = { viewModel.toggleAddDialog() },
-        onAdd = { viewModel.addAccount(it) }
-    )
-}
+        AddAccountDialog(
+            onDismiss = { viewModel.toggleAddDialog() },
+            onAdd = { viewModel.addAccount(it) }
+        )
+    }
 
-val accountToAdjust = state.accountToAdjust
-if (state.showAdjustDialog && accountToAdjust != null) {
-    AdjustBalanceDialog(
-        account = accountToAdjust,
-        onDismiss = { viewModel.closeAdjustDialog() },
-        onSave = { viewModel.saveAdjustedBalance(it) }
-    )
-}
+    val accountToAdjust = state.accountToAdjust
+    if (state.showAdjustDialog && accountToAdjust != null) {
+        AdjustBalanceDialog(
+            account = accountToAdjust,
+            onDismiss = { viewModel.closeAdjustDialog() },
+            onSave = { viewModel.saveAdjustedBalance(it) },
+            onDelete = { viewModel.deleteAccount(accountToAdjust) }
+        )
+    }
 }
 
 @Composable
@@ -183,7 +197,16 @@ private fun AddAccountDialog(onDismiss: () -> Unit, onAdd: (AccountEntity) -> Un
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nome da conta") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = bank, onValueChange = { bank = it }, label = { Text("Banco / Instituição") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = balance, onValueChange = { balance = it.filter { c -> c.isDigit() || c == '.' || c == '-' } }, label = { Text("Saldo Inicial (R$)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = balance,
+                    onValueChange = { balance = CurrencyUtils.filterAmountInput(it, allowNegative = true) },
+                    label = { Text("Saldo Inicial (R$)") },
+                    placeholder = { Text("0,00") },
+                    singleLine = true,
+                    isError = balance.isNotBlank() && CurrencyUtils.parseAmount(balance) == null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Text("Tipo:", style = MaterialTheme.typography.labelMedium)
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     types.chunked(3).forEach { row ->
@@ -199,10 +222,11 @@ private fun AddAccountDialog(onDismiss: () -> Unit, onAdd: (AccountEntity) -> Un
         confirmButton = {
             Button(
                 onClick = {
-                    val bal = balance.toDoubleOrNull() ?: 0.0
-                    onAdd(AccountEntity(name = name, bankName = bank, accountType = type, balance = bal, initialBalance = bal, color = "#2E7D52", icon = "account_balance", createdAt = DateUtils.today()))
+                    val bal = if (balance.isBlank()) 0.0 else CurrencyUtils.parseAmount(balance) ?: return@Button
+                    onAdd(AccountEntity(name = name.trim(), bankName = bank.trim(), accountType = type, balance = bal, initialBalance = bal, color = "#2E7D52", icon = "account_balance", createdAt = DateUtils.today()))
                 },
-                enabled = name.isNotBlank() && bank.isNotBlank()
+                enabled = name.isNotBlank() && bank.isNotBlank() &&
+                    (balance.isBlank() || CurrencyUtils.parseAmount(balance) != null)
             ) { Text("Adicionar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
@@ -210,8 +234,25 @@ private fun AddAccountDialog(onDismiss: () -> Unit, onAdd: (AccountEntity) -> Un
 }
 
 @Composable
-private fun AdjustBalanceDialog(account: AccountEntity, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
-    var balance by remember(account) { mutableStateOf(account.balance.toString()) }
+private fun AdjustBalanceDialog(
+    account: AccountEntity,
+    onDismiss: () -> Unit,
+    onSave: (Double) -> Unit,
+    onDelete: () -> Unit
+) {
+    var balance by remember(account) { mutableStateOf(CurrencyUtils.toInputString(account.balance)) }
+    var confirmDelete by remember(account) { mutableStateOf(false) }
+
+    if (confirmDelete) {
+        ConfirmDialog(
+            title = "Excluir conta?",
+            message = "\"${account.name}\" e todos os lançamentos vinculados a ela serão excluídos. Esta ação não pode ser desfeita.",
+            confirmLabel = "Excluir",
+            onConfirm = onDelete,
+            onDismiss = { confirmDelete = false }
+        )
+        return
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -221,18 +262,28 @@ private fun AdjustBalanceDialog(account: AccountEntity, onDismiss: () -> Unit, o
                 Text(account.name, style = MaterialTheme.typography.titleSmall)
                 OutlinedTextField(
                     value = balance,
-                    onValueChange = { balance = it.filter { c -> c.isDigit() || c == '.' || c == ',' || c == '-' } },
+                    onValueChange = { balance = CurrencyUtils.filterAmountInput(it, allowNegative = true) },
                     label = { Text("Novo saldo (R$)") },
                     singleLine = true,
+                    isError = CurrencyUtils.parseAmount(balance) == null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
                 )
+                Text(
+                    "Use para corrigir o saldo conforme o extrato do banco.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(onClick = { confirmDelete = true }) {
+                    Text("Excluir conta", color = MaterialTheme.colorScheme.error)
+                }
             }
         },
         confirmButton = {
             Button(onClick = {
-                val value = balance.replace(",", ".").toDoubleOrNull() ?: return@Button
+                val value = CurrencyUtils.parseAmount(balance) ?: return@Button
                 onSave(value)
-            }) { Text("Salvar") }
+            }, enabled = CurrencyUtils.parseAmount(balance) != null) { Text("Salvar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )

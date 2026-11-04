@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.meugestor.app.ui.screens.home
 
 import androidx.compose.foundation.layout.*
@@ -15,8 +17,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meugestor.app.MeuGestorApp
+import com.meugestor.app.data.database.entity.TransactionType
+import com.meugestor.app.ui.common.CollectMessages
+import com.meugestor.app.ui.common.TransactionDialogsHost
+import com.meugestor.app.ui.common.rememberTransactionDialogState
+import com.meugestor.app.ui.common.rememberTransactionLookups
 import com.meugestor.app.ui.components.EmptyState
-import com.meugestor.app.ui.components.StatusBadge
+import com.meugestor.app.ui.components.TransactionRow
 import com.meugestor.app.ui.navigation.Screen
 import com.meugestor.app.ui.theme.*
 import com.meugestor.app.util.CurrencyUtils
@@ -28,6 +35,10 @@ fun HomeScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
         factory = HomeViewModel.Factory(app.transactionRepository, app.accountRepository)
     )
     val state by viewModel.uiState.collectAsState()
+    val dialogs = rememberTransactionDialogState()
+    val lookups = rememberTransactionLookups(app)
+
+    CollectMessages(viewModel.messages)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -38,7 +49,7 @@ fun HomeScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
         item {
             Column {
                 Text(
-                    text = "Olá! \uD83D\uDC4B",
+                    text = "Olá! 👋",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -76,31 +87,16 @@ fun HomeScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column {
-                            Text("Em contas", style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f))
-                            Text(CurrencyUtils.formatBRL(state.totalInAccounts),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                fontWeight = FontWeight.SemiBold)
-                        }
-                        Column {
-                            Text("Em dinheiro", style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f))
-                            Text(CurrencyUtils.formatBRL(state.totalCash),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                fontWeight = FontWeight.SemiBold)
-                        }
-                        Column {
-                            Text("A pagar", style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f))
-                            Text(CurrencyUtils.formatBRL(state.totalPayable),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                fontWeight = FontWeight.SemiBold)
-                        }
+                        BalanceDetail("Em contas", state.totalInAccounts)
+                        BalanceDetail("Em dinheiro", state.totalCash)
+                        BalanceDetail("A pagar", state.totalPayable)
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Saldo previsto após pendências: ${CurrencyUtils.formatBRL(state.projectedBalance)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
+                    )
                 }
             }
         }
@@ -113,14 +109,14 @@ fun HomeScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
             ) {
                 SummaryCard(
                     modifier = Modifier.weight(1f),
-                    title = "Receitas",
+                    title = "Receitas do mês",
                     value = state.monthlyIncome,
                     icon = Icons.Filled.TrendingUp,
                     valueColor = IncomeGreen
                 )
                 SummaryCard(
                     modifier = Modifier.weight(1f),
-                    title = "Despesas",
+                    title = "Despesas do mês",
                     value = state.monthlyExpenses,
                     icon = Icons.Filled.TrendingDown,
                     valueColor = ExpenseRed
@@ -135,14 +131,14 @@ fun HomeScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     AssistChip(
-                        onClick = { onNavigate(Screen.CashFlow.route) },
+                        onClick = { dialogs.create(TransactionType.INCOME) },
                         label = { Text("Nova Receita") },
                         leadingIcon = { Icon(Icons.Outlined.Add, null, tint = IncomeGreen) }
                     )
                 }
                 item {
                     AssistChip(
-                        onClick = { onNavigate(Screen.CashFlow.route) },
+                        onClick = { dialogs.create(TransactionType.EXPENSE) },
                         label = { Text("Nova Despesa") },
                         leadingIcon = { Icon(Icons.Outlined.Remove, null, tint = ExpenseRed) }
                     )
@@ -166,7 +162,25 @@ fun HomeScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
 
         // Upcoming due items
         item {
-            Text("Contas a Vencer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Contas a Vencer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    if (state.overdueCount > 0) {
+                        Text(
+                            "${state.overdueCount} em atraso",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ExpenseRed
+                        )
+                    }
+                }
+                TextButton(onClick = { onNavigate(Screen.Future.route) }) {
+                    Text("Ver futuro")
+                }
+            }
         }
         if (state.upcomingDueItems.isEmpty()) {
             item {
@@ -175,7 +189,7 @@ fun HomeScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Text(
-                        text = "Nenhuma conta próxima do vencimento",
+                        text = "Nenhuma conta vencendo nos próximos 7 dias",
                         modifier = Modifier.padding(16.dp),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -183,8 +197,13 @@ fun HomeScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
                 }
             }
         } else {
-            items(state.upcomingDueItems) { item ->
-                DueItemCard(item)
+            items(state.upcomingDueItems, key = { "due_${it.id}" }) { item ->
+                TransactionRow(
+                    transaction = item,
+                    categoryName = lookups.categoryName(item),
+                    showDueInfo = true,
+                    onClick = { dialogs.openDetails(item) }
+                )
             }
         }
 
@@ -206,14 +225,39 @@ fun HomeScreen(app: MeuGestorApp, onNavigate: (String) -> Unit) {
                 EmptyState(
                     icon = Icons.Outlined.AccountBalanceWallet,
                     title = "Sem lançamentos ainda",
-                    description = "Adicione sua primeira receita ou despesa"
+                    description = "Adicione sua primeira receita ou despesa",
+                    actionLabel = "Novo Lançamento",
+                    onAction = { dialogs.create(TransactionType.EXPENSE) }
                 )
             }
         } else {
-            items(state.recentTransactions.take(5)) { tx ->
-                TransactionListItem(tx)
+            items(state.recentTransactions, key = { "recent_${it.id}" }) { tx ->
+                TransactionRow(
+                    transaction = tx,
+                    categoryName = lookups.categoryName(tx),
+                    onClick = { dialogs.openDetails(tx) }
+                )
             }
         }
+    }
+
+    TransactionDialogsHost(app = app, viewModel = viewModel, state = dialogs, lookups = lookups)
+}
+
+@Composable
+private fun BalanceDetail(label: String, value: Double) {
+    Column {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+        )
+        Text(
+            CurrencyUtils.formatBRL(value),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onPrimary,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
@@ -240,71 +284,5 @@ private fun SummaryCard(
                 color = valueColor
             )
         }
-    }
-}
-
-@Composable
-private fun DueItemCard(transaction: com.meugestor.app.data.database.entity.TransactionEntity) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(transaction.description, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                Text(
-                    text = "Vence: ${DateUtils.formatDate(transaction.dueDate ?: "")}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    CurrencyUtils.formatBRL(transaction.amount),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = ExpenseRed
-                )
-                StatusBadge(transaction.status.name)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TransactionListItem(transaction: com.meugestor.app.data.database.entity.TransactionEntity) {
-    val isIncome = transaction.type.name == "INCOME"
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            modifier = Modifier.size(40.dp),
-            shape = MaterialTheme.shapes.small,
-            color = if (isIncome) IncomeGreen.copy(alpha = 0.1f) else ExpenseRed.copy(alpha = 0.1f)
-        ) {
-            Icon(
-                imageVector = if (isIncome) Icons.Filled.TrendingUp else Icons.Filled.TrendingDown,
-                contentDescription = null,
-                modifier = Modifier.padding(8.dp),
-                tint = if (isIncome) IncomeGreen else ExpenseRed
-            )
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(transaction.description, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
-            Text(
-                DateUtils.formatDate(transaction.date),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Text(
-            text = "${if (isIncome) "+" else "-"} ${CurrencyUtils.formatBRL(transaction.amount)}",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = if (isIncome) IncomeGreen else ExpenseRed
-        )
     }
 }

@@ -26,4 +26,10 @@ interface TaxChecklistDao {
 
     @Query("SELECT COUNT(*) FROM tax_checklist_items WHERE year = :year AND is_completed = 1")
     fun getCompletionCount(year: Int): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM tax_checklist_items WHERE year = :year")
+    suspend fun countByYear(year: Int): Int
+
+    @Query("SELECT * FROM tax_checklist_items ORDER BY year DESC, category, description")
+    suspend fun getAllOnce(): List<TaxChecklistItemEntity>
 }

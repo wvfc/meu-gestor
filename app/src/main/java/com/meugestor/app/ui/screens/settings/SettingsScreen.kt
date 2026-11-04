@@ -1,14 +1,20 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.meugestor.app.ui.screens.settings
 
+import android.Manifest
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -53,6 +59,7 @@ import com.meugestor.app.MeuGestorApp
 import com.meugestor.app.data.backup.BackupExporter
 import com.meugestor.app.ui.security.BiometricHelper
 import com.meugestor.app.util.DateUtils
+import com.meugestor.app.worker.ReminderWorker
 import kotlinx.coroutines.launch
 
 @Composable
@@ -62,26 +69,95 @@ fun SettingsScreen(app: MeuGestorApp) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var darkMode by remember { mutableStateOf(false) }
-    var notificationsEnabled by remember { mutableStateOf(true) }
+    // Antes estes switches eram apenas estado local: não salvavam nem tinham efeito.
+    val darkModePreference by app.userPreferences.isDarkMode.collectAsState(initial = null)
+    val darkMode = darkModePreference ?: isSystemInDarkTheme()
+    val notificationsPreference by app.userPreferences.notificationsEnabled.collectAsState(initial = false)
+    var notificationPermissionGranted by remember { mutableStateOf(ReminderWorker.canPostNotifications(context)) }
+    val notificationsEnabled = notificationsPreference && notificationPermissionGranted
 
     val biometricEnabled by app.userPreferences.isBiometricEnabled.collectAsState(initial = false)
     val lastBackupDate by app.userPreferences.lastBackupDate.collectAsState(initial = "")
 
     var pendingBackupContent by remember { mutableStateOf<String?>(null) }
+    var pendingCsvContent by remember { mutableStateOf<String?>(null) }
 
-    val saveBackupLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
+    fun enableNotifications() {
+        scope.launch {
+            app.userPreferences.setNotificationsEnabled(true)
+            ReminderWorker.schedule(context)
+            snackbarHostState.showSnackbar("Lembretes diários de vencimento ativados.")
+        }
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        notificationPermissionGranted = ReminderWorker.canPostNotifications(context)
+        if (granted && notificationPermissionGranted) {
+            enableNotifications()
+        } else {
+            scope.launch {
+                snackbarHostState.showSnackbar("Permita as notificações do app nas configurações do Android.")
+            }
+        }
+    }
+
+    fun toggleNotifications(enable: Boolean) {
+        if (!enable) {
+            scope.launch {
+                app.userPreferences.setNotificationsEnabled(false)
+                ReminderWorker.cancel(context)
+            }
+            return
+        }
+        notificationPermissionGranted = ReminderWorker.canPostNotifications(context)
+        when {
+            notificationPermissionGranted -> enableNotifications()
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            else -> scope.launch {
+                snackbarHostState.showSnackbar("As notificações estão desativadas para o app nas configurações do Android.")
+            }
+        }
+    }
+
+    val saveCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
     ) { uri: Uri? ->
-        if (uri == null || pendingBackupContent == null) return@rememberLauncherForActivityResult
+        val content = pendingCsvContent
+        if (uri == null || content == null) return@rememberLauncherForActivityResult
 
         scope.launch {
             runCatching {
                 context.contentResolver.openOutputStream(uri)?.use { output ->
-                    output.write(pendingBackupContent!!.toByteArray())
-                }
+                    // BOM para o Excel reconhecer os acentos (UTF-8).
+                    output.write("\uFEFF".toByteArray(Charsets.UTF_8))
+                    output.write(content.toByteArray(Charsets.UTF_8))
+                } ?: error("Não foi possível abrir o arquivo")
+            }.onSuccess {
+                pendingCsvContent = null
+                snackbarHostState.showSnackbar("CSV exportado com sucesso.")
+            }.onFailure {
+                snackbarHostState.showSnackbar("Falha ao exportar CSV: ${it.message}")
+            }
+        }
+    }
+
+    val saveBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        val content = pendingBackupContent
+        if (uri == null || content == null) return@rememberLauncherForActivityResult
+
+        scope.launch {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    output.write(content.toByteArray(Charsets.UTF_8))
+                } ?: error("Não foi possível abrir o arquivo")
                 app.userPreferences.setLastBackupDate(DateUtils.today())
             }.onSuccess {
+                pendingBackupContent = null
                 snackbarHostState.showSnackbar("Backup salvo com sucesso.")
             }.onFailure {
                 snackbarHostState.showSnackbar("Falha ao salvar backup: ${it.message}")
@@ -124,6 +200,7 @@ fun SettingsScreen(app: MeuGestorApp) {
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         LazyColumn(
@@ -182,7 +259,7 @@ fun SettingsScreen(app: MeuGestorApp) {
                     title = "Modo Escuro",
                     subtitle = "Alternar tema claro/escuro",
                     checked = darkMode,
-                    onCheckedChange = { darkMode = it }
+                    onCheckedChange = { enabled -> scope.launch { app.userPreferences.setDarkMode(enabled) } }
                 )
             }
 
@@ -191,9 +268,13 @@ fun SettingsScreen(app: MeuGestorApp) {
                 SettingsSwitchItem(
                     icon = Icons.Outlined.Notifications,
                     title = "Notificações",
-                    subtitle = "Alertas de vencimento e metas",
+                    subtitle = if (notificationsEnabled) {
+                        "Lembrete diário de contas vencendo ou em atraso"
+                    } else {
+                        "Ativar lembretes de vencimento"
+                    },
                     checked = notificationsEnabled,
-                    onCheckedChange = { notificationsEnabled = it }
+                    onCheckedChange = { toggleNotifications(it) }
                 )
             }
 
@@ -239,9 +320,18 @@ fun SettingsScreen(app: MeuGestorApp) {
                 SettingsActionItem(
                     icon = Icons.Outlined.FileDownload,
                     title = "Exportar CSV",
-                    subtitle = "Pode ser implementado depois do backup JSON",
-                    onClick = {},
-                    enabled = false
+                    subtitle = "Lançamentos em planilha (Excel, Google Sheets)",
+                    onClick = {
+                        scope.launch {
+                            runCatching {
+                                pendingCsvContent = BackupExporter.generateTransactionsCsv(app)
+                            }.onSuccess {
+                                saveCsvLauncher.launch("meu_gestor_lancamentos_${DateUtils.today()}.csv")
+                            }.onFailure {
+                                snackbarHostState.showSnackbar("Falha ao gerar CSV: ${it.message}")
+                            }
+                        }
+                    }
                 )
             }
 

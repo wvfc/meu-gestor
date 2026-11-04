@@ -22,10 +22,12 @@ class UserPreferences(private val context: Context) {
         val PIN_CODE = stringPreferencesKey("pin_code")
         val LAST_BACKUP_DATE = stringPreferencesKey("last_backup_date")
         val IS_BIOMETRIC_ENABLED = booleanPreferencesKey("is_biometric_enabled")
+        val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
     }
 
-    val isDarkMode: Flow<Boolean> = context.dataStore.data
-        .map { preferences -> preferences[Keys.IS_DARK_MODE] ?: false }
+    /** null = seguir o tema do sistema (padrão até o usuário escolher nas configurações). */
+    val isDarkMode: Flow<Boolean?> = context.dataStore.data
+        .map { preferences -> preferences[Keys.IS_DARK_MODE] }
 
     val hasCompletedOnboarding: Flow<Boolean> = context.dataStore.data
         .map { preferences -> preferences[Keys.HAS_COMPLETED_ONBOARDING] ?: false }
@@ -44,6 +46,9 @@ class UserPreferences(private val context: Context) {
 
     val isBiometricEnabled: Flow<Boolean> = context.dataStore.data
         .map { preferences -> preferences[Keys.IS_BIOMETRIC_ENABLED] ?: false }
+
+    val notificationsEnabled: Flow<Boolean> = context.dataStore.data
+        .map { preferences -> preferences[Keys.NOTIFICATIONS_ENABLED] ?: true }
 
     suspend fun setDarkMode(isDarkMode: Boolean) {
         context.dataStore.edit { preferences ->
@@ -84,6 +89,12 @@ class UserPreferences(private val context: Context) {
     suspend fun setBiometricEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[Keys.IS_BIOMETRIC_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setNotificationsEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.NOTIFICATIONS_ENABLED] = enabled
         }
     }
 

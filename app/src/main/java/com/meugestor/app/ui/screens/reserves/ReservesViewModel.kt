@@ -70,7 +70,10 @@ class ReservesViewModel(
     }
 
     fun deleteAccount(account: AccountEntity) {
-        viewModelScope.launch { accountRepository.delete(account) }
+        viewModelScope.launch {
+            accountRepository.delete(account)
+            closeAdjustDialog()
+        }
     }
 
     fun openAdjustDialog(account: AccountEntity) {

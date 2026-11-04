@@ -1,7 +1,11 @@
 package com.meugestor.app.data.backup
 
 import com.meugestor.app.MeuGestorApp
+import com.meugestor.app.data.database.entity.TransactionStatus
+import com.meugestor.app.data.database.entity.TransactionType
+import com.meugestor.app.util.DateUtils
 import kotlinx.coroutines.flow.first
+import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -17,18 +21,15 @@ object BackupExporter {
         val goals = db.goalDao().getAll().first()
         val attachments = db.attachmentDao().getAll().first()
 
-        val taxYears = db.taxDocumentDao().getYears().first()
-        val taxDocuments = taxYears.flatMap { year ->
-            db.taxDocumentDao().getByYear(year).first()
-        }
-        val checklistItems = taxYears.flatMap { year ->
-            db.taxChecklistDao().getByYear(year).first()
-        }
+        // Antes o checklist só era exportado para anos que tinham documentos.
+        val taxDocuments = db.taxDocumentDao().getAllOnce()
+        val checklistItems = db.taxChecklistDao().getAllOnce()
 
         val root = JSONObject()
 
         root.put("app", "Meu Gestor")
         root.put("version", "1.0.0")
+        root.put("schema_version", 2)
         root.put("exported_at", java.time.OffsetDateTime.now().toString())
 
         val preferences = JSONObject()
@@ -118,6 +119,7 @@ object BackupExporter {
                     put("total_installments", tx.totalInstallments)
                     put("created_at", tx.createdAt)
                     put("updated_at", tx.updatedAt)
+                    put("balance_applied", tx.balanceApplied)
                 })
             }
         })
@@ -185,5 +187,56 @@ object BackupExporter {
         })
 
         return root.toString(2)
+    }
+
+    /** Exporta todos os lançamentos em CSV (separador ";" para abrir direto no Excel em pt-BR). */
+    suspend fun generateTransactionsCsv(app: MeuGestorApp): String {
+        val db = app.database
+        val transactions = db.transactionDao().getAll().first()
+        val categories = db.categoryDao().getAll().first().associate { it.id to it.name }
+        val accounts = db.accountDao().getAll().first().associate { it.id to it.name }
+        val cards = db.creditCardDao().getAll().first().associate { it.id to it.name }
+
+        val header = listOf(
+            "Data", "Vencimento", "Tipo", "Descrição", "Categoria", "Conta", "Cartão",
+            "Parcela", "Status", "Valor", "Observações"
+        )
+        val rows = transactions.sortedBy { it.date }.map { tx ->
+            listOf(
+                DateUtils.formatDate(tx.date),
+                tx.dueDate?.let { DateUtils.formatDate(it) } ?: "",
+                typeLabel(tx.type),
+                tx.description,
+                tx.categoryId?.let { categories[it] } ?: "",
+                accounts[tx.accountId] ?: "",
+                tx.creditCardId?.let { cards[it] } ?: "",
+                if ((tx.totalInstallments ?: 1) > 1) "${tx.installmentNumber}/${tx.totalInstallments}" else "",
+                statusLabel(tx.status),
+                String.format(Locale("pt", "BR"), "%.2f", tx.amount),
+                tx.notes ?: ""
+            )
+        }
+        return (listOf(header) + rows).joinToString("\r\n") { row ->
+            row.joinToString(";") { csvEscape(it) }
+        }
+    }
+
+    private fun csvEscape(value: String): String {
+        val needsQuotes = value.any { it == ';' || it == '"' || it == '\n' || it == '\r' }
+        return if (needsQuotes) "\"" + value.replace("\"", "\"\"") + "\"" else value
+    }
+
+    private fun typeLabel(type: TransactionType): String = when (type) {
+        TransactionType.INCOME -> "Receita"
+        TransactionType.EXPENSE -> "Despesa"
+        TransactionType.TRANSFER -> "Transferência"
+        TransactionType.ADJUSTMENT -> "Ajuste"
+    }
+
+    private fun statusLabel(status: TransactionStatus): String = when (status) {
+        TransactionStatus.PAID -> "Pago"
+        TransactionStatus.PENDING -> "Pendente"
+        TransactionStatus.OVERDUE -> "Atrasado"
+        TransactionStatus.CANCELLED -> "Cancelado"
     }
 }

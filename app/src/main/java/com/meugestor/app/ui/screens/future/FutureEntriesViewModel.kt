@@ -5,13 +5,24 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.meugestor.app.data.database.entity.TransactionEntity
 import com.meugestor.app.data.database.entity.TransactionType
-import com.meugestor.app.data.repository.TransactionRepository
 import com.meugestor.app.data.repository.AccountRepository
+import com.meugestor.app.data.repository.TransactionRepository
+import com.meugestor.app.domain.effectiveDueDate
+import com.meugestor.app.ui.common.TransactionActionsViewModel
 import com.meugestor.app.util.DateUtils
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import java.time.YearMonth
 
-data class MonthProjection(val label: String, val income: Double, val expense: Double) {
+data class MonthProjection(
+    val label: String,
+    val income: Double,
+    val expense: Double,
+    /** Saldo estimado ao final do mês, acumulando as pendências até ele. */
+    val endBalance: Double = 0.0
+) {
     val balance: Double get() = income - expense
 }
 
@@ -23,61 +34,83 @@ data class FutureEntriesUiState(
     val totalPayable: Double = 0.0,
     val projectedBalance: Double = 0.0,
     val negativeBalanceRisk: Boolean = false,
+    /** Primeiro mês em que o saldo estimado fica negativo, se houver. */
+    val firstNegativeMonth: String? = null,
     val monthlyProjections: List<MonthProjection> = emptyList(),
     val currentBalance: Double = 0.0,
     val isLoading: Boolean = true
 )
 
 class FutureEntriesViewModel(
-    private val transactionRepository: TransactionRepository,
-    private val accountRepository: AccountRepository
-) : ViewModel() {
+    transactionRepository: TransactionRepository,
+    accountRepository: AccountRepository
+) : TransactionActionsViewModel(transactionRepository) {
 
-    private val _uiState = MutableStateFlow(FutureEntriesUiState())
-    val uiState: StateFlow<FutureEntriesUiState> = _uiState.asStateFlow()
+    // Saldo e pendências combinados: antes o saldo previsto usava o saldo ainda não carregado.
+    val uiState: StateFlow<FutureEntriesUiState> = combine(
+        accountRepository.getTotalBalance(),
+        transactionRepository.getPendingTransactions()
+    ) { balance, pending ->
+        buildState(balance ?: 0.0, pending)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FutureEntriesUiState())
 
-    init { loadData() }
+    private fun buildState(currentBalance: Double, pending: List<TransactionEntity>): FutureEntriesUiState {
+        val today = DateUtils.todayDate()
+        val incomes = pending.filter { it.type == TransactionType.INCOME }
+        val expenses = pending.filter { it.type == TransactionType.EXPENSE }
+        val totalReceivable = incomes.sumOf { it.amount }
+        val totalPayable = expenses.sumOf { it.amount }
+        val projected = currentBalance + totalReceivable - totalPayable
 
-    private fun loadData() {
-        val today = DateUtils.today()
-        viewModelScope.launch {
-            accountRepository.getTotalBalance().collect { balance ->
-                _uiState.update { it.copy(currentBalance = balance ?: 0.0) }
-            }
+        // Projeção dos próximos 6 meses; pendências atrasadas entram no mês atual.
+        val firstMonth = YearMonth.from(today)
+        val months = (0L until PROJECTION_MONTHS).map { firstMonth.plusMonths(it) }
+        val lastMonth = months.last()
+        val byMonth = pending.groupBy { tx ->
+            val due = tx.effectiveDueDate() ?: today
+            val month = YearMonth.from(due)
+            if (month.isBefore(firstMonth)) firstMonth else month
         }
-        viewModelScope.launch {
-            transactionRepository.getPendingExpenses().collect { expenses ->
-                val incomes = expenses.filter { it.type == TransactionType.INCOME }
-                val exps = expenses.filter { it.type == TransactionType.EXPENSE }
-                val totalRec = incomes.sumOf { it.amount }
-                val totalPay = exps.sumOf { it.amount }
-                _uiState.update {
-                    it.copy(
-                        futureIncomes = incomes,
-                        futureExpenses = exps,
-                        totalReceivable = totalRec,
-                        totalPayable = totalPay,
-                        projectedBalance = it.currentBalance + totalRec - totalPay,
-                        negativeBalanceRisk = it.currentBalance + totalRec - totalPay < 0,
-                        isLoading = false
-                    )
-                }
-            }
+
+        var running = currentBalance
+        var firstNegative: String? = null
+        val projections = months.map { month ->
+            val items = byMonth[month].orEmpty()
+            val income = items.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+            val expense = items.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+            running += income - expense
+            if (running < 0 && firstNegative == null) firstNegative = DateUtils.formatYearMonth(month)
+            MonthProjection(
+                label = DateUtils.formatShortMonth(month),
+                income = income,
+                expense = expense,
+                endBalance = running
+            )
         }
-        viewModelScope.launch {
-            transactionRepository.getUpcomingDueItems(today).collect { items ->
-                _uiState.update { it.copy(upcomingItems = items) }
-            }
-        }
-        buildMonthlyProjections()
+        // Pendências além do horizonte do gráfico também contam para o risco.
+        val beyondHorizon = byMonth.filterKeys { it.isAfter(lastMonth) }.values.flatten()
+        val finalBalance = running +
+            beyondHorizon.filter { it.type == TransactionType.INCOME }.sumOf { it.amount } -
+            beyondHorizon.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+
+        val limitDate = today.plusDays(7)
+        return FutureEntriesUiState(
+            futureIncomes = incomes,
+            futureExpenses = expenses,
+            upcomingItems = pending.filter { tx -> tx.effectiveDueDate()?.isAfter(limitDate) != true },
+            totalReceivable = totalReceivable,
+            totalPayable = totalPayable,
+            projectedBalance = projected,
+            negativeBalanceRisk = firstNegative != null || finalBalance < 0,
+            firstNegativeMonth = firstNegative,
+            monthlyProjections = projections,
+            currentBalance = currentBalance,
+            isLoading = false
+        )
     }
 
-    private fun buildMonthlyProjections() {
-        val months = listOf("Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez")
-        val projections = months.mapIndexed { i, label ->
-            MonthProjection(label, income = 0.0, expense = 0.0)
-        }
-        _uiState.update { it.copy(monthlyProjections = projections) }
+    companion object {
+        private const val PROJECTION_MONTHS = 6L
     }
 
     class Factory(

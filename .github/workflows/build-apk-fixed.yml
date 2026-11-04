@@ -23,6 +23,9 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # O pacote padrão 'tools' foi removido do repositório do SDK e quebrava este passo.
+          packages: 'platform-tools'
 
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties

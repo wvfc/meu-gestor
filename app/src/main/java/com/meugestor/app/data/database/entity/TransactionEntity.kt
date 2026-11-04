@@ -148,5 +148,13 @@ data class TransactionEntity(
     val createdAt: String,
 
     @ColumnInfo(name = "updated_at")
-    val updatedAt: String
+    val updatedAt: String,
+
+    /**
+     * Indica se o valor deste lançamento já foi refletido no saldo da conta.
+     * Mantido pelo TransactionRepository para que edições, mudanças de status e exclusões
+     * revertam exatamente o que foi aplicado (e nada além disso).
+     */
+    @ColumnInfo(name = "balance_applied", defaultValue = "0")
+    val balanceApplied: Boolean = false
 )

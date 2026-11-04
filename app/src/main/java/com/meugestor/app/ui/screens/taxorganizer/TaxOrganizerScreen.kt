@@ -1,6 +1,11 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.meugestor.app.ui.screens.taxorganizer
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -14,9 +19,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meugestor.app.MeuGestorApp
+import com.meugestor.app.data.database.entity.TaxDocumentEntity
+import com.meugestor.app.ui.components.ConfirmDialog
 import com.meugestor.app.ui.theme.*
 import com.meugestor.app.util.CurrencyUtils
 
@@ -28,6 +36,7 @@ fun TaxOrganizerScreen(app: MeuGestorApp) {
     )
     val state by viewModel.uiState.collectAsState()
     val selectedCategory = state.categories.find { it.id == state.selectedCategoryId }
+    var documentToDelete by remember { mutableStateOf<TaxDocumentEntity?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -53,21 +62,28 @@ fun TaxOrganizerScreen(app: MeuGestorApp) {
 
         // Year selector
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Column {
                 Text("Ano-Base", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Row {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     state.availableYears.forEach { year ->
                         FilterChip(
                             selected = state.selectedYear == year,
                             onClick = { viewModel.selectYear(year) },
-                            label = { Text(year.toString()) },
-                            modifier = Modifier.padding(horizontal = 4.dp)
+                            label = { Text(year.toString()) }
                         )
                     }
+                }
+                if (state.documents.isNotEmpty()) {
+                    Text(
+                        "${state.documents.size} documento(s) • ${CurrencyUtils.formatBRL(state.documentsTotal)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -175,8 +191,8 @@ fun TaxOrganizerScreen(app: MeuGestorApp) {
                     Text("Documentos (${catDocs.size})", style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold)
                 }
-                items(catDocs) { doc ->
-                    TaxDocumentItem(doc)
+                items(catDocs, key = { it.id }) { doc ->
+                    TaxDocumentItem(doc, onDelete = { documentToDelete = doc })
                 }
             } else {
                 item {
@@ -205,7 +221,7 @@ fun TaxOrganizerScreen(app: MeuGestorApp) {
                 Text("Checklist Completo", style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold)
             }
-            items(state.checklist) { item ->
+            items(state.checklist, key = { "check_${it.id}" }) { item ->
                 ChecklistItemRow(
                     item = item,
                     onToggle = { viewModel.toggleChecklistItem(it) }
@@ -214,9 +230,23 @@ fun TaxOrganizerScreen(app: MeuGestorApp) {
         }
     }
 
-    if (state.showAddDocDialog && state.selectedCategoryId != null) {
+    documentToDelete?.let { doc ->
+        ConfirmDialog(
+            title = "Excluir documento?",
+            message = "\"${doc.description}\" será removido do ano-base ${doc.year}.",
+            confirmLabel = "Excluir",
+            onConfirm = {
+                viewModel.deleteDocument(doc)
+                documentToDelete = null
+            },
+            onDismiss = { documentToDelete = null }
+        )
+    }
+
+    val categoryForNewDocument = state.selectedCategoryId
+    if (state.showAddDocDialog && categoryForNewDocument != null) {
         AddDocumentDialog(
-            categoryId = state.selectedCategoryId!!,
+            categoryId = categoryForNewDocument,
             year = state.selectedYear,
             onDismiss = { viewModel.toggleAddDocDialog() },
             onAdd = { viewModel.addDocument(it) }
@@ -258,7 +288,7 @@ private fun TaxCategoryCard(
 }
 
 @Composable
-private fun TaxDocumentItem(doc: com.meugestor.app.data.database.entity.TaxDocumentEntity) {
+private fun TaxDocumentItem(doc: TaxDocumentEntity, onDelete: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(12.dp).fillMaxWidth(),
@@ -267,11 +297,14 @@ private fun TaxDocumentItem(doc: com.meugestor.app.data.database.entity.TaxDocum
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(doc.description, style = MaterialTheme.typography.bodyMedium)
-                Text(doc.source ?: "", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "${doc.source} • ${com.meugestor.app.util.DateUtils.formatDate(doc.documentDate)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Column(horizontalAlignment = Alignment.End) {
-                if (doc.amount != null) {
+                if (doc.amount > 0) {
                     Text(CurrencyUtils.formatBRL(doc.amount), style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold)
                 }
@@ -279,6 +312,9 @@ private fun TaxDocumentItem(doc: com.meugestor.app.data.database.entity.TaxDocum
                     Icon(Icons.Default.AttachFile, null, modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.primary)
                 }
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Outlined.Delete, contentDescription = "Excluir documento")
             }
         }
     }
@@ -331,8 +367,14 @@ private fun AddDocumentDialog(
                     label = { Text("Descrição") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = source, onValueChange = { source = it },
                     label = { Text("Fonte / Empresa") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = amount, onValueChange = { amount = it.filter { c -> c.isDigit() || c == '.' } },
-                    label = { Text("Valor (R$) — opcional") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = com.meugestor.app.util.CurrencyUtils.filterAmountInput(it) },
+                    label = { Text("Valor (R$) — opcional") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
@@ -341,8 +383,8 @@ private fun AddDocumentDialog(
                     onAdd(com.meugestor.app.data.database.entity.TaxDocumentEntity(
                         year = year,
                         category = com.meugestor.app.data.database.entity.TaxDocumentCategory.valueOf(categoryId),
-                        description = description,
-                        amount = amount.toDoubleOrNull() ?: 0.0,
+                        description = description.trim(),
+                        amount = com.meugestor.app.util.CurrencyUtils.parseAmount(amount) ?: 0.0,
                         source = source.ifBlank { "—" },
                         documentDate = com.meugestor.app.util.DateUtils.today(),
                         createdAt = com.meugestor.app.util.DateUtils.today()

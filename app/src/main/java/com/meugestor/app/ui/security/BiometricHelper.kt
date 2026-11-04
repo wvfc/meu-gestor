@@ -16,12 +16,17 @@ object BiometricHelper {
             BiometricManager.BIOMETRIC_SUCCESS
     }
 
+    /**
+     * @param onError erro definitivo (prompt fechado ou cancelado).
+     * @param onFailedAttempt tentativa não reconhecida; o prompt continua aberto.
+     */
     fun authenticate(
         activity: FragmentActivity,
         title: String,
         subtitle: String,
         onSuccess: () -> Unit,
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        onFailedAttempt: () -> Unit = {}
     ) {
         val executor = ContextCompat.getMainExecutor(activity)
 
@@ -35,7 +40,8 @@ object BiometricHelper {
             }
 
             override fun onAuthenticationFailed() {
-                onError("Autenticação falhou. Tente novamente.")
+                // Antes era tratado como erro definitivo, embora o prompt continue aberto.
+                onFailedAttempt()
             }
         }
 

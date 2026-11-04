@@ -5,6 +5,8 @@ import com.meugestor.app.data.database.dao.TaxDocumentDao
 import com.meugestor.app.data.database.entity.TaxChecklistItemEntity
 import com.meugestor.app.data.database.entity.TaxDocumentEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class AnnualTaxSummary(
     val year: Int,
@@ -17,6 +19,7 @@ class TaxRepository(
     private val taxDocumentDao: TaxDocumentDao,
     private val taxChecklistDao: TaxChecklistDao
 ) {
+    private val checklistSeedMutex = Mutex()
 
     // Tax Documents
 
@@ -45,6 +48,21 @@ class TaxRepository(
 
     suspend fun addChecklistItems(items: List<TaxChecklistItemEntity>) =
         taxChecklistDao.insertAll(items)
+
+    /**
+     * Cria o checklist padrão do ano somente se ele ainda não existir.
+     * O mutex evita duplicação quando o usuário troca de ano rapidamente.
+     */
+    suspend fun ensureChecklist(year: Int, defaultItems: List<String>) {
+        checklistSeedMutex.withLock {
+            if (taxChecklistDao.countByYear(year) > 0) return
+            taxChecklistDao.insertAll(
+                defaultItems.map { description ->
+                    TaxChecklistItemEntity(year = year, description = description, category = "Geral")
+                }
+            )
+        }
+    }
 
     suspend fun updateChecklistItem(item: TaxChecklistItemEntity) =
         taxChecklistDao.update(item)

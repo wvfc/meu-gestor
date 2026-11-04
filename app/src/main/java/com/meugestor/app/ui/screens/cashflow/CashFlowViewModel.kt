@@ -4,15 +4,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.meugestor.app.data.database.entity.TransactionEntity
+import com.meugestor.app.data.database.entity.TransactionStatus
 import com.meugestor.app.data.database.entity.TransactionType
 import com.meugestor.app.data.repository.TransactionRepository
+import com.meugestor.app.ui.common.TransactionActionsViewModel
 import com.meugestor.app.util.DateUtils
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
+import java.time.YearMonth
 
-enum class CashFlowFilter { ALL, INCOME, EXPENSE, TRANSFER }
+enum class CashFlowFilter { ALL, INCOME, EXPENSE, PENDING }
 
 data class CashFlowUiState(
+    val month: YearMonth = YearMonth.now(),
     val transactions: List<TransactionEntity> = emptyList(),
     val filteredTransactions: List<TransactionEntity> = emptyList(),
     val currentFilter: CashFlowFilter = CashFlowFilter.ALL,
@@ -20,71 +24,58 @@ data class CashFlowUiState(
     val totalIncome: Double = 0.0,
     val totalExpense: Double = 0.0,
     val balance: Double = 0.0,
-    val isLoading: Boolean = true,
-    val showAddDialog: Boolean = false
+    val pendingCount: Int = 0,
+    val isLoading: Boolean = true
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class CashFlowViewModel(
-    private val transactionRepository: TransactionRepository
-) : ViewModel() {
+    transactionRepository: TransactionRepository
+) : TransactionActionsViewModel(transactionRepository) {
 
-    private val _uiState = MutableStateFlow(CashFlowUiState())
-    val uiState: StateFlow<CashFlowUiState> = _uiState.asStateFlow()
+    private val selectedMonth = MutableStateFlow(YearMonth.now())
+    private val filter = MutableStateFlow(CashFlowFilter.ALL)
+    private val query = MutableStateFlow("")
 
-    init { loadTransactions() }
-
-    private fun loadTransactions() {
-        val start = DateUtils.getStartOfMonth()
-        val end = DateUtils.getEndOfMonth()
-        viewModelScope.launch {
-            transactionRepository.getByDateRange(start, end).collect { list ->
-                val income = list.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
-                val expense = list.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
-                _uiState.update { state ->
-                    state.copy(
-                        transactions = list,
-                        filteredTransactions = applyFilters(list, state.currentFilter, state.searchQuery),
-                        totalIncome = income,
-                        totalExpense = expense,
-                        balance = income - expense,
-                        isLoading = false
-                    )
-                }
-            }
-        }
+    private val monthTransactions = selectedMonth.flatMapLatest { month ->
+        transactionRepository
+            .getByDateRange(DateUtils.startOfMonth(month), DateUtils.endOfMonth(month))
+            .map { list -> month to list }
     }
 
-    fun setFilter(filter: CashFlowFilter) {
-        _uiState.update { state ->
-            state.copy(
-                currentFilter = filter,
-                filteredTransactions = applyFilters(state.transactions, filter, state.searchQuery)
-            )
-        }
+    val uiState: StateFlow<CashFlowUiState> = combine(monthTransactions, filter, query) { monthData, currentFilter, currentQuery ->
+        val (month, list) = monthData
+        val active = list.filter { it.status != TransactionStatus.CANCELLED }
+        val income = active.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+        val expense = active.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+        CashFlowUiState(
+            month = month,
+            transactions = list,
+            filteredTransactions = applyFilters(list, currentFilter, currentQuery),
+            currentFilter = currentFilter,
+            searchQuery = currentQuery,
+            totalIncome = income,
+            totalExpense = expense,
+            balance = income - expense,
+            pendingCount = list.count { it.status == TransactionStatus.PENDING || it.status == TransactionStatus.OVERDUE },
+            isLoading = false
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CashFlowUiState())
+
+    fun previousMonth() = selectedMonth.update { it.minusMonths(1) }
+
+    fun nextMonth() = selectedMonth.update { it.plusMonths(1) }
+
+    fun goToCurrentMonth() {
+        selectedMonth.value = YearMonth.now()
     }
 
-    fun setSearchQuery(query: String) {
-        _uiState.update { state ->
-            state.copy(
-                searchQuery = query,
-                filteredTransactions = applyFilters(state.transactions, state.currentFilter, query)
-            )
-        }
+    fun setFilter(newFilter: CashFlowFilter) {
+        filter.value = newFilter
     }
 
-    fun toggleAddDialog() {
-        _uiState.update { it.copy(showAddDialog = !it.showAddDialog) }
-    }
-
-    fun addTransaction(transaction: TransactionEntity) {
-        viewModelScope.launch {
-            transactionRepository.addTransaction(transaction)
-            _uiState.update { it.copy(showAddDialog = false) }
-        }
-    }
-
-    fun deleteTransaction(transaction: TransactionEntity) {
-        viewModelScope.launch { transactionRepository.delete(transaction) }
+    fun setSearchQuery(newQuery: String) {
+        query.value = newQuery
     }
 
     private fun applyFilters(list: List<TransactionEntity>, filter: CashFlowFilter, query: String): List<TransactionEntity> {
@@ -93,9 +84,11 @@ class CashFlowViewModel(
                 CashFlowFilter.ALL -> true
                 CashFlowFilter.INCOME -> tx.type == TransactionType.INCOME
                 CashFlowFilter.EXPENSE -> tx.type == TransactionType.EXPENSE
-                CashFlowFilter.TRANSFER -> tx.type == TransactionType.TRANSFER
+                CashFlowFilter.PENDING -> tx.status == TransactionStatus.PENDING || tx.status == TransactionStatus.OVERDUE
             }
-            val matchesQuery = query.isBlank() || tx.description.contains(query, ignoreCase = true)
+            val matchesQuery = query.isBlank() ||
+                tx.description.contains(query, ignoreCase = true) ||
+                tx.notes?.contains(query, ignoreCase = true) == true
             matchesFilter && matchesQuery
         }
     }

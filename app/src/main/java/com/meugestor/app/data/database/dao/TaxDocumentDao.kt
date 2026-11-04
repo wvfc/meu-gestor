@@ -15,16 +15,8 @@ interface TaxDocumentDao {
     @Query("SELECT * FROM tax_documents WHERE id = :id")
     suspend fun getById(id: Long): TaxDocumentEntity?
 
-    @Query(
-        """
-        SELECT category AS categoryId, SUM(amount) AS total
-        FROM tax_documents
-        WHERE year = :year
-        GROUP BY category
-        ORDER BY total DESC
-        """
-    )
-    fun getTotalGroupedByCategory(year: Int): Flow<List<CategoryTotal>>
+    @Query("SELECT * FROM tax_documents ORDER BY year DESC, category, document_date DESC")
+    suspend fun getAllOnce(): List<TaxDocumentEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(taxDocument: TaxDocumentEntity): Long

@@ -3,12 +3,19 @@ package com.meugestor.app.ui.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.meugestor.app.data.database.entity.AccountType
 import com.meugestor.app.data.database.entity.TransactionEntity
+import com.meugestor.app.data.database.entity.TransactionStatus
+import com.meugestor.app.data.database.entity.TransactionType
 import com.meugestor.app.data.repository.AccountRepository
 import com.meugestor.app.data.repository.TransactionRepository
+import com.meugestor.app.domain.effectiveDueDate
+import com.meugestor.app.ui.common.TransactionActionsViewModel
 import com.meugestor.app.util.DateUtils
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 
 data class HomeUiState(
     val totalBalance: Double = 0.0,
@@ -17,69 +24,52 @@ data class HomeUiState(
     val monthlyIncome: Double = 0.0,
     val monthlyExpenses: Double = 0.0,
     val totalPayable: Double = 0.0,
+    val totalReceivable: Double = 0.0,
     val projectedBalance: Double = 0.0,
+    val overdueCount: Int = 0,
     val recentTransactions: List<TransactionEntity> = emptyList(),
     val upcomingDueItems: List<TransactionEntity> = emptyList(),
     val isLoading: Boolean = true
 )
 
 class HomeViewModel(
-    private val transactionRepository: TransactionRepository,
-    private val accountRepository: AccountRepository
-) : ViewModel() {
+    transactionRepository: TransactionRepository,
+    accountRepository: AccountRepository
+) : TransactionActionsViewModel(transactionRepository) {
 
-    private val _uiState = MutableStateFlow(HomeUiState())
-    val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+    private val today = DateUtils.todayDate()
 
-    init {
-        loadData()
-    }
+    val uiState: StateFlow<HomeUiState> = combine(
+        accountRepository.getAllAccounts(),
+        transactionRepository.getByDateRange(DateUtils.getStartOfMonth(), DateUtils.getEndOfMonth()),
+        transactionRepository.getPendingTransactions(),
+        transactionRepository.getRecent(DateUtils.today(), limit = 5)
+    ) { accounts, monthTransactions, pending, recent ->
+        val active = monthTransactions.filter { it.status != TransactionStatus.CANCELLED }
+        val payable = pending.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+        val receivable = pending.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+        val balance = accounts.sumOf { it.balance }
+        val limitDate = today.plusDays(7)
 
-    private fun loadData() {
-        val startOfMonth = DateUtils.getStartOfMonth()
-        val endOfMonth = DateUtils.getEndOfMonth()
-        val today = DateUtils.today()
-
-        viewModelScope.launch {
-            accountRepository.getTotalBalance().collect { total ->
-                _uiState.update { it.copy(totalBalance = total ?: 0.0) }
-            }
-        }
-        viewModelScope.launch {
-            accountRepository.getTotalByType("CHECKING").collect { total ->
-                _uiState.update { it.copy(totalInAccounts = total ?: 0.0) }
-            }
-        }
-        viewModelScope.launch {
-            accountRepository.getTotalByType("CASH").collect { total ->
-                _uiState.update { it.copy(totalCash = total ?: 0.0) }
-            }
-        }
-        viewModelScope.launch {
-            transactionRepository.getByDateRange(startOfMonth, endOfMonth).collect { list ->
-                val income = list.filter { it.type.name == "INCOME" }.sumOf { it.amount }
-                val expense = list.filter { it.type.name == "EXPENSE" }.sumOf { it.amount }
-                _uiState.update {
-                    it.copy(
-                        monthlyIncome = income,
-                        monthlyExpenses = expense,
-                        recentTransactions = list.take(10),
-                        isLoading = false
-                    )
-                }
-            }
-        }
-        viewModelScope.launch {
-            transactionRepository.getPendingExpenses().collect { items ->
-                _uiState.update { it.copy(totalPayable = items.sumOf { tx -> tx.amount }) }
-            }
-        }
-        viewModelScope.launch {
-            transactionRepository.getUpcomingDueItems(today).collect { items ->
-                _uiState.update { it.copy(upcomingDueItems = items.take(5)) }
-            }
-        }
-    }
+        HomeUiState(
+            totalBalance = balance,
+            totalInAccounts = accounts
+                .filter { it.accountType == AccountType.CHECKING || it.accountType == AccountType.SAVINGS }
+                .sumOf { it.balance },
+            totalCash = accounts.filter { it.accountType == AccountType.CASH }.sumOf { it.balance },
+            monthlyIncome = active.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
+            monthlyExpenses = active.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount },
+            totalPayable = payable,
+            totalReceivable = receivable,
+            projectedBalance = balance + receivable - payable,
+            overdueCount = pending.count { tx -> tx.effectiveDueDate()?.isBefore(today) == true },
+            recentTransactions = recent,
+            upcomingDueItems = pending
+                .filter { tx -> tx.effectiveDueDate()?.isAfter(limitDate) != true }
+                .take(5),
+            isLoading = false
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     class Factory(
         private val transactionRepository: TransactionRepository,

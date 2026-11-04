@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.meugestor.app.ui.screens.reports
 
 import androidx.compose.foundation.layout.*
@@ -21,7 +23,7 @@ import com.meugestor.app.util.CurrencyUtils
 @Composable
 fun ReportsScreen(app: MeuGestorApp) {
     val viewModel: ReportsViewModel = viewModel(
-        factory = ReportsViewModel.Factory(app.transactionRepository)
+        factory = ReportsViewModel.Factory(app.transactionRepository, app.categoryRepository)
     )
     val state by viewModel.uiState.collectAsState()
 
@@ -35,7 +37,7 @@ fun ReportsScreen(app: MeuGestorApp) {
 
         when (state.selectedTab) {
             0 -> GastosTab(state, viewModel)
-            1 -> RankingTab(state)
+            1 -> RankingTab(state, viewModel)
         }
     }
 }
@@ -56,13 +58,13 @@ private fun GastosTab(state: ReportsUiState, viewModel: ReportsViewModel) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 SummaryMetricCard(
                     modifier = Modifier.weight(1f),
-                    label = "Receitas",
+                    label = "Receitas ${state.periodLabel}",
                     value = state.totalMonthIncome,
                     color = IncomeGreen
                 )
                 SummaryMetricCard(
                     modifier = Modifier.weight(1f),
-                    label = "Despesas",
+                    label = "Despesas ${state.periodLabel}",
                     value = state.totalMonthExpense,
                     color = ExpenseRed
                 )
@@ -126,7 +128,7 @@ private fun GastosTab(state: ReportsUiState, viewModel: ReportsViewModel) {
 }
 
 @Composable
-private fun RankingTab(state: ReportsUiState) {
+private fun RankingTab(state: ReportsUiState, viewModel: ReportsViewModel) {
     val totalExpense = state.totalMonthExpense.coerceAtLeast(1.0)
 
     LazyColumn(
@@ -134,7 +136,28 @@ private fun RankingTab(state: ReportsUiState) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("Top Maiores Despesas do Mês", style = MaterialTheme.typography.titleMedium,
+            PeriodFilterChips(selected = state.selectedPeriod, onSelect = { viewModel.selectPeriod(it) })
+        }
+
+        if (state.categoryRanking.isNotEmpty()) {
+            item {
+                Text("Gastos por Categoria (${state.periodLabel})", style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold)
+            }
+            itemsIndexed(state.categoryRanking) { index, item ->
+                RankingItemRow(
+                    position = index + 1,
+                    label = item.label,
+                    amount = item.amount,
+                    percentage = item.percentage,
+                    color = parseHexColor(item.color) ?: rankingColor(index)
+                )
+            }
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+        }
+
+        item {
+            Text("Maiores Despesas (${state.periodLabel})", style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold)
         }
 
@@ -233,6 +256,15 @@ private fun SummaryMetricCard(
             Text(CurrencyUtils.formatBRL(value), style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold, color = color)
         }
+    }
+}
+
+private fun parseHexColor(hex: String?): Color? {
+    if (hex.isNullOrBlank()) return null
+    return try {
+        Color(android.graphics.Color.parseColor(hex))
+    } catch (e: IllegalArgumentException) {
+        null
     }
 }
 

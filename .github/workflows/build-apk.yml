@@ -3,6 +3,7 @@ name: Build & Release APK
 on:
   push:
     branches: [ main, 'claude/*' ]
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -23,6 +24,9 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # O pacote padrão 'tools' foi removido do repositório do SDK e quebrava este passo.
+          packages: 'platform-tools'
 
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
@@ -49,6 +53,9 @@ jobs:
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
       - name: Rename APK
         run: |

@@ -7,6 +7,8 @@ import com.meugestor.app.data.database.entity.TaxChecklistItemEntity
 import com.meugestor.app.data.database.entity.TaxDocumentEntity
 import com.meugestor.app.data.repository.TaxRepository
 import com.meugestor.app.util.DateUtils
+import com.meugestor.app.util.SampleData
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -20,9 +22,10 @@ data class TaxCategory(
 
 data class TaxOrganizerUiState(
     val selectedYear: Int = DateUtils.currentYear() - 1,
-    val availableYears: List<Int> = listOf(DateUtils.currentYear() - 1, DateUtils.currentYear() - 2, DateUtils.currentYear() - 3),
+    val availableYears: List<Int> = defaultYears(),
     val categories: List<TaxCategory> = emptyList(),
     val documents: List<TaxDocumentEntity> = emptyList(),
+    val documentsTotal: Double = 0.0,
     val checklist: List<TaxChecklistItemEntity> = emptyList(),
     val checklistProgress: Float = 0f,
     val selectedCategoryId: String? = null,
@@ -30,45 +33,76 @@ data class TaxOrganizerUiState(
     val showAddDocDialog: Boolean = false
 )
 
+/** Ano corrente (organização durante o ano) e os três anos-base anteriores. */
+private fun defaultYears(): List<Int> {
+    val current = DateUtils.currentYear()
+    return listOf(current, current - 1, current - 2, current - 3)
+}
+
+private data class TaxUiOptions(
+    val selectedCategoryId: String? = null,
+    val showAddDocDialog: Boolean = false
+)
+
+@OptIn(ExperimentalCoroutinesApi::class)
 class TaxOrganizerViewModel(
     private val taxRepository: TaxRepository
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(TaxOrganizerUiState(categories = buildCategories()))
-    val uiState: StateFlow<TaxOrganizerUiState> = _uiState.asStateFlow()
+    private val categories = buildCategories()
+    private val selectedYear = MutableStateFlow(DateUtils.currentYear() - 1)
+    private val options = MutableStateFlow(TaxUiOptions())
 
-    init { loadData() }
+    // flatMapLatest cancela a coleta do ano anterior. Antes cada troca de ano iniciava novos
+    // coletores sem cancelar os antigos, e os dados de anos diferentes se sobrescreviam.
+    private val yearData = selectedYear.flatMapLatest { year ->
+        combine(
+            taxRepository.getDocumentsByYear(year),
+            taxRepository.getChecklist(year)
+        ) { docs, checklist -> Triple(year, docs, checklist) }
+    }
 
-    private fun loadData() {
-        val year = _uiState.value.selectedYear
-        viewModelScope.launch {
-            taxRepository.getDocumentsByYear(year).collect { docs ->
-                _uiState.update { it.copy(documents = docs, isLoading = false) }
-            }
-        }
-        viewModelScope.launch {
-            taxRepository.getChecklist(year).collect { items ->
-                val completed = items.count { it.isCompleted }
-                val progress = if (items.isNotEmpty()) completed.toFloat() / items.size else 0f
-                _uiState.update { it.copy(checklist = items, checklistProgress = progress) }
-            }
-        }
+    val uiState: StateFlow<TaxOrganizerUiState> = combine(yearData, options) { (year, docs, checklist), opts ->
+        val completed = checklist.count { it.isCompleted }
+        TaxOrganizerUiState(
+            selectedYear = year,
+            categories = categories,
+            documents = docs,
+            documentsTotal = docs.sumOf { it.amount },
+            checklist = checklist,
+            checklistProgress = if (checklist.isNotEmpty()) completed.toFloat() / checklist.size else 0f,
+            selectedCategoryId = opts.selectedCategoryId,
+            isLoading = false,
+            showAddDocDialog = opts.showAddDocDialog
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        TaxOrganizerUiState(categories = categories)
+    )
+
+    init {
+        ensureChecklist(selectedYear.value)
     }
 
     fun selectYear(year: Int) {
-        _uiState.update { it.copy(selectedYear = year, isLoading = true) }
-        loadData()
+        selectedYear.value = year
+        ensureChecklist(year)
     }
 
     fun selectCategory(id: String?) {
-        _uiState.update { it.copy(selectedCategoryId = id) }
+        options.update { it.copy(selectedCategoryId = id) }
     }
 
     fun addDocument(doc: TaxDocumentEntity) {
         viewModelScope.launch {
             taxRepository.addDocument(doc)
-            _uiState.update { it.copy(showAddDocDialog = false) }
+            options.update { it.copy(showAddDocDialog = false) }
         }
+    }
+
+    fun deleteDocument(doc: TaxDocumentEntity) {
+        viewModelScope.launch { taxRepository.deleteDocument(doc) }
     }
 
     fun toggleChecklistItem(item: TaxChecklistItemEntity) {
@@ -78,7 +112,14 @@ class TaxOrganizerViewModel(
     }
 
     fun toggleAddDocDialog() {
-        _uiState.update { it.copy(showAddDocDialog = !it.showAddDocDialog) }
+        options.update { it.copy(showAddDocDialog = !it.showAddDocDialog) }
+    }
+
+    /** O checklist padrão existia em SampleData mas nunca era criado. */
+    private fun ensureChecklist(year: Int) {
+        viewModelScope.launch {
+            taxRepository.ensureChecklist(year, SampleData.sampleTaxChecklist)
+        }
     }
 
     private companion object {
@@ -93,6 +134,7 @@ class TaxOrganizerViewModel(
             TaxCategory("PENSAO","Pensão Alimentícia","Pensão judicial ou por acordo homologado","Dedutível integralmente quando judicial","⚖️"),
             TaxCategory("BENS_DIREITOS","Bens e Direitos","Imóveis, veículos, investimentos","Declarar com valor de aquisição em 31/12","🏠"),
             TaxCategory("DIVIDAS","Dívidas e Ônus","Financiamentos, empréstimos acima de R$ 5.000","Declarar com saldo devedor","💳"),
+            TaxCategory("DESPESAS_PROFISSIONAIS","Despesas Profissionais","Livro-caixa de autônomos e profissionais liberais","Dedutíveis quando escrituradas em livro-caixa","💼"),
             TaxCategory("DOACOES","Doações","Doações incentivadas (ECA, idoso, cultura, esporte)","Dedutíveis até 6% do imposto devido","🤝"),
             TaxCategory("INVESTIMENTOS","Investimentos","Ações, fundos, CDB, tesouro direto","Informar posição em 31/12 e ganhos/perdas","📈"),
             TaxCategory("ALUGUEL","Aluguel","Aluguel pago ou recebido","Recebido: tributável. Pago: dedutível em livro-caixa","🏢"),

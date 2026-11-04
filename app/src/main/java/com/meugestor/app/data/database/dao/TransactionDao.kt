@@ -17,11 +17,15 @@ data class MonthlyTotal(
 
 @Dao
 interface TransactionDao {
-    @Query("SELECT * FROM transactions ORDER BY date DESC")
+    @Query("SELECT * FROM transactions ORDER BY date DESC, id DESC")
     fun getAll(): Flow<List<TransactionEntity>>
 
-    @Query("SELECT * FROM transactions WHERE date BETWEEN :startDate AND :endDate ORDER BY date DESC")
+    @Query("SELECT * FROM transactions WHERE date BETWEEN :startDate AND :endDate ORDER BY date DESC, id DESC")
     fun getByDateRange(startDate: String, endDate: String): Flow<List<TransactionEntity>>
+
+    /** Últimos lançamentos até hoje (repetições futuras não entram como "recentes"). */
+    @Query("SELECT * FROM transactions WHERE date <= :today ORDER BY date DESC, id DESC LIMIT :limit")
+    fun getRecent(today: String, limit: Int): Flow<List<TransactionEntity>>
 
     @Query("SELECT * FROM transactions WHERE category_id = :categoryId ORDER BY date DESC")
     fun getByCategory(categoryId: Long): Flow<List<TransactionEntity>>
@@ -31,6 +35,9 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE credit_card_id = :creditCardId ORDER BY date DESC")
     fun getByCreditCard(creditCardId: Long): Flow<List<TransactionEntity>>
+
+    @Query("SELECT * FROM transactions WHERE credit_card_id IS NOT NULL ORDER BY date DESC, id DESC")
+    fun getCreditCardTransactions(): Flow<List<TransactionEntity>>
 
     @Query("SELECT * FROM transactions WHERE status = :status ORDER BY date DESC")
     fun getByStatus(status: String): Flow<List<TransactionEntity>>
@@ -62,19 +69,43 @@ interface TransactionDao {
         """
         SELECT * FROM transactions
         WHERE type = 'EXPENSE'
-        AND status = 'PENDING'
-        ORDER BY due_date ASC
+        AND status IN ('PENDING', 'OVERDUE')
+        ORDER BY COALESCE(due_date, date) ASC
         """
     )
     fun getPendingExpenses(): Flow<List<TransactionEntity>>
 
+    /** Receitas e despesas ainda não realizadas (a receber / a pagar). */
     @Query(
         """
         SELECT * FROM transactions
-        WHERE status = 'PENDING'
-        AND due_date IS NOT NULL
-        AND due_date BETWEEN :date AND date(:date, '+7 days')
-        ORDER BY due_date ASC
+        WHERE type IN ('INCOME', 'EXPENSE')
+        AND status IN ('PENDING', 'OVERDUE')
+        ORDER BY COALESCE(due_date, date) ASC, id ASC
+        """
+    )
+    fun getPendingTransactions(): Flow<List<TransactionEntity>>
+
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE type IN ('INCOME', 'EXPENSE')
+        AND status IN ('PENDING', 'OVERDUE')
+        ORDER BY COALESCE(due_date, date) ASC, id ASC
+        """
+    )
+    suspend fun getPendingTransactionsOnce(): List<TransactionEntity>
+
+    /**
+     * Itens pendentes que vencem nos próximos 7 dias, incluindo os já vencidos
+     * (antes os atrasados e os itens sem due_date ficavam de fora).
+     */
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE status IN ('PENDING', 'OVERDUE')
+        AND COALESCE(due_date, date) <= date(:date, '+7 days')
+        ORDER BY COALESCE(due_date, date) ASC, id ASC
         """
     )
     fun getUpcomingDueItems(date: String): Flow<List<TransactionEntity>>
@@ -116,6 +147,10 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getById(id: Long): TransactionEntity?
 
+    /** Lançamento original e todas as parcelas/repetições ligadas a ele. */
+    @Query("SELECT * FROM transactions WHERE id = :rootId OR parent_transaction_id = :rootId ORDER BY date ASC, id ASC")
+    suspend fun getSeries(rootId: Long): List<TransactionEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(transaction: TransactionEntity): Long
 
@@ -124,6 +159,20 @@ interface TransactionDao {
 
     @Delete
     suspend fun delete(transaction: TransactionEntity)
+
+    /**
+     * Remove as compras ainda em aberto de um cartão que será excluído.
+     * Itens já aplicados ao saldo são preservados como histórico.
+     */
+    @Query(
+        """
+        DELETE FROM transactions
+        WHERE credit_card_id = :creditCardId
+        AND status != 'PAID'
+        AND balance_applied = 0
+        """
+    )
+    suspend fun deleteOpenByCreditCard(creditCardId: Long)
 
     @Query(
         """
